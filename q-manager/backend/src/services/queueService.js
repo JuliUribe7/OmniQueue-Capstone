@@ -1,4 +1,7 @@
 const prisma = require('../prismaClient');
+const eventService = require('./eventService');
+let telnyx;
+try { telnyx = require('./telnyxService'); } catch (e) { telnyx = null; }
 
 async function joinQueue(serviceId, customerToken, phoneNumber) {
   const service = await prisma.service.findUnique({ where: { id: serviceId } });
@@ -19,6 +22,24 @@ async function joinQueue(serviceId, customerToken, phoneNumber) {
       phoneNumber,
     },
   });
+
+  // log event
+  try {
+    await eventService.createEvent(ticket.id, 'joined', { phoneNumber, serviceId });
+  } catch (e) {
+    // swallow event errors but log
+    // eslint-disable-next-line no-console
+    console.error('Failed to create join event', e);
+  }
+
+  // send SMS if configured and phoneNumber present
+  if (phoneNumber && telnyx && process.env.TELNYX_API_KEY) {
+    const msg = `You've joined ${service.name}. Your position: ${position}`;
+    telnyx.sendSMS(phoneNumber, msg).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error('Telnyx send failed', err);
+    });
+  }
 
   return ticket;
 }

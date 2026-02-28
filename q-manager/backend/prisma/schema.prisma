@@ -40,3 +40,12 @@ model ServiceLog {
   actualDuration Int      // Used to train your prediction algorithm
   completedAt    DateTime @default(now())
 }
+
+model Event {
+  id        String   @id @default(uuid())
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  type      String   // joined, snoozed, canceled, served, notified
+  metadata  Json?
+  createdAt DateTime @default(now())
+}
