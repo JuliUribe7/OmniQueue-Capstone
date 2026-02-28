@@ -35,11 +35,16 @@ model Ticket {
   service     Service   @relation(fields: [serviceId], references: [id])
 }
 
+  events    Event[] {
+}
+
+
 model ServiceLog {
   id             String   @id @default(uuid())
   actualDuration Int      // Used to train your prediction algorithm
   completedAt    DateTime @default(now())
 }
+
 
 model Event {
   id        String   @id @default(uuid())
