@@ -1,0 +1,19 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+const queueRoutes = require('./src/routes/queueRoutes');
+app.use(queueRoutes);
+
+const errorHandler = require('./src/middleware/errorHandler');
+app.use(errorHandler);
+
+const port = process.env.PORT || 4000;
+app.listen(port, () => {
+  // eslint-disable-next-line no-console
+  console.log(`Backend listening on http://localhost:${port}`);
+});

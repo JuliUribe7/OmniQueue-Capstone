@@ -1,14 +1,42 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  id          String    @id @default(uuid())
+  name        String
+  services    Service[]
+}
+
+model Service {
+  id              String    @id @default(uuid())
+  name            String    // e.g., "Haircut"
+  averageDuration Int       // Baseline for predictions
+  businessId      String
+  business        Business  @relation(fields: [businessId], references: [id])
+  tickets         Ticket[]
+}
+
+model Ticket {
+  id          String    @id @default(uuid())
+  position    Int       // User's spot in line
+  status      String    // "Waiting", "Snoozed", "Served"
+  customerToken String? // lightweight session token for customer
+  phoneNumber String?    // optional phone for SMS
+  snoozeCount Int       @default(0) // Tracks the "running late" interaction
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  serviceId   String
+  service     Service   @relation(fields: [serviceId], references: [id])
+}
+
+model ServiceLog {
+  id             String   @id @default(uuid())
+  actualDuration Int      // Used to train your prediction algorithm
+  completedAt    DateTime @default(now())
 }
