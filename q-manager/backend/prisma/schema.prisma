@@ -23,21 +23,22 @@ model Service {
 }
 
 model Ticket {
-  id          String    @id @default(uuid())
-  position    Int       // User's spot in line
-  status      String    // "Waiting", "Snoozed", "Served"
-  customerToken String? // lightweight session token for customer
-  phoneNumber String?    // optional phone for SMS
-  snoozeCount Int       @default(0) // Tracks the "running late" interaction
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  serviceId   String
-  service     Service   @relation(fields: [serviceId], references: [id])
+  id            String   @id @default(uuid())
+  position      Int
+  status        String
+  customerToken String?
+  phoneNumber   String?
+  snoozeCount   Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Foreign Key Field
+  serviceId     String
+  
+  // Relations
+  service       Service  @relation(fields: [serviceId], references: [id])
+  events        Event[]
 }
-
-  events    Event[] {
-}
-
 
 model ServiceLog {
   id             String   @id @default(uuid())
