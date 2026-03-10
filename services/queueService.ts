@@ -3,8 +3,9 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Base URL for the backend API - change this to your actual server
-const API_BASE_URL = 'http://localhost:3001';
+// Base URL for the backend API
+// set EXPO_PUBLIC_API_URL in your .env file, falls back to localhost for local dev
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
 
 // types — match the backend's Prisma models
 
