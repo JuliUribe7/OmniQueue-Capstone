@@ -1,40 +1,57 @@
-const prisma = require('../prismaClient');
+const { pool, query } = require('../db');
 const eventService = require('./eventService');
 let telnyx;
 try { telnyx = require('./telnyxService'); } catch (e) { telnyx = null; }
 
 async function joinQueue(serviceId, customerToken, phoneNumber) {
-  const service = await prisma.service.findUnique({ where: { id: serviceId } });
+  // Look up the service
+  const serviceRes = await query(
+    'SELECT * FROM "Service" WHERE "id" = $1',
+    [serviceId],
+  );
+  const service = serviceRes.rows[0];
   if (!service) throw Object.assign(new Error('Service not found'), { status: 404 });
 
-  const waitingCount = await prisma.ticket.count({
-    where: { serviceId, status: 'Waiting' },
-  });
+  // Use a transaction so position count + ticket insert are atomic
+  const client = await pool.connect();
+  let ticket;
+  try {
+    await client.query('BEGIN');
 
-  const position = waitingCount + 1;
+    const countRes = await client.query(
+      'SELECT COUNT(*) FROM "Ticket" WHERE "serviceId" = $1 AND "status" = $2',
+      [serviceId, 'Waiting'],
+    );
+    const position = parseInt(countRes.rows[0].count, 10) + 1;
 
-  const ticket = await prisma.ticket.create({
-    data: {
-      position,
-      status: 'Waiting',
-      serviceId,
-      customerToken,
-      phoneNumber,
-    },
-  });
+    const ticketRes = await client.query(
+      `INSERT INTO "Ticket"
+         ("id", "position", "status", "serviceId", "customerToken", "phoneNumber", "createdAt", "updatedAt")
+       VALUES (gen_random_uuid()::text, $1, 'Waiting', $2, $3, $4, NOW(), NOW())
+       RETURNING *`,
+      [position, serviceId, customerToken, phoneNumber],
+    );
+    ticket = ticketRes.rows[0];
 
-  // log event
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // Log event
   try {
     await eventService.createEvent(ticket.id, 'joined', { phoneNumber, serviceId });
   } catch (e) {
-    // swallow event errors but log
     // eslint-disable-next-line no-console
     console.error('Failed to create join event', e);
   }
 
-  // send SMS if configured and phoneNumber present
+  // Send SMS if configured and phoneNumber present
   if (phoneNumber && telnyx && process.env.TELNYX_API_KEY) {
-    const msg = `You've joined ${service.name}. Your position: ${position}`;
+    const msg = `You've joined ${service.name}. Your position: ${ticket.position}`;
     telnyx.sendSMS(phoneNumber, msg).catch((err) => {
       // eslint-disable-next-line no-console
       console.error('Telnyx send failed', err);
@@ -46,11 +63,11 @@ async function joinQueue(serviceId, customerToken, phoneNumber) {
 
 async function getEntryByToken(customerToken) {
   if (!customerToken) return null;
-  const ticket = await prisma.ticket.findFirst({
-    where: { customerToken },
-    orderBy: { createdAt: 'desc' },
-  });
-  return ticket;
+  const res = await query(
+    'SELECT * FROM "Ticket" WHERE "customerToken" = $1 ORDER BY "createdAt" DESC LIMIT 1',
+    [customerToken],
+  );
+  return res.rows[0] || null;
 }
 
 module.exports = { joinQueue, getEntryByToken };
