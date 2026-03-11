@@ -1,5 +1,5 @@
 // Main screen — the customer portal
-// Flow: select service → describe visit → confirm → waiting → called
+// Flow: contact info → select service → confirm → waiting → called
 
 import React, { useState } from 'react';
 import {
@@ -31,16 +31,22 @@ import {
 const BUSINESS_NAME = "Classic Cuts Barbershop";
 
 export default function CustomerPortal() {
-  // Get all state and actions from the useQueue hook
   const {
     currentStep,
     services,
     selectedService,
+    customerName,
+    phoneNumber,
     description,
     queuePosition,
     estimatedWait,
+    isLoading,
+    error,
     setCurrentStep,
+    setCustomerName,
+    setPhoneNumber,
     setDescription,
+    submitContact,
     selectService,
     submitDescription,
     joinQueue,
@@ -49,9 +55,10 @@ export default function CustomerPortal() {
     goBack,
   } = useQueue();
 
-  // Local state for snooze modal
   const [showSnoozeModal, setShowSnoozeModal] = useState(false);
   const [snoozeIndex, setSnoozeIndex] = useState(0);
+
+  const contactReady = customerName.trim().length > 0 && phoneNumber.trim().length >= 10;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -68,10 +75,58 @@ export default function CustomerPortal() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+
+        {/* Step 0: name and phone number */}
+        {currentStep === 'contact' && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Welcome!</Text>
+            <Text style={styles.cardSubtitle}>
+              Enter your details to join the queue and get SMS updates
+            </Text>
+
+            <TextInput
+              style={styles.textInput}
+              value={customerName}
+              onChangeText={setCustomerName}
+              placeholder="Your name"
+              placeholderTextColor={Colors.light.icon}
+              autoCapitalize="words"
+              returnKeyType="next"
+            />
+
+            <TextInput
+              style={styles.textInput}
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              placeholder="Phone number"
+              placeholderTextColor={Colors.light.icon}
+              keyboardType="phone-pad"
+              returnKeyType="done"
+            />
+
+            <Text style={styles.smsNote}>
+              We'll text you when you're almost up
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.primaryButton, !contactReady && styles.primaryButtonDisabled]}
+              onPress={submitContact}
+              disabled={!contactReady}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.primaryButtonText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Step 1: service selection */}
         {currentStep === 'select' && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>How can we help you?</Text>
+            <TouchableOpacity onPress={goBack} style={styles.backButton}>
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.cardTitle}>Hi {customerName.split(' ')[0]}!</Text>
             <Text style={styles.cardSubtitle}>
               Choose a service or describe your visit
             </Text>
@@ -91,10 +146,8 @@ export default function CustomerPortal() {
               <Text style={styles.describeArrow}>→</Text>
             </TouchableOpacity>
 
-            {/* Divider */}
             <Text style={styles.dividerText}>or choose a service</Text>
 
-            {/* Service grid */}
             <View style={styles.serviceGrid}>
               {services.map((service) => (
                 <View key={service.id} style={styles.serviceGridItem}>
@@ -118,7 +171,7 @@ export default function CustomerPortal() {
             </Text>
 
             <TextInput
-              style={styles.textInput}
+              style={styles.textAreaInput}
               value={description}
               onChangeText={setDescription}
               placeholder="e.g., I need a haircut and beard trim, just a cleanup..."
@@ -129,10 +182,7 @@ export default function CustomerPortal() {
             />
 
             <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                !description.trim() && styles.primaryButtonDisabled,
-              ]}
+              style={[styles.primaryButton, !description.trim() && styles.primaryButtonDisabled]}
               onPress={submitDescription}
               disabled={!description.trim()}
               activeOpacity={0.7}
@@ -151,24 +201,21 @@ export default function CustomerPortal() {
 
             <Text style={styles.confirmTitle}>{selectedService.name}</Text>
 
-            {/* Show description if they typed one */}
             {(selectedService as any).description && (
               <Text style={styles.descriptionPreview}>
                 "{(selectedService as any).description}"
               </Text>
             )}
 
-            {/* Wait time display */}
             <WaitTimeDisplay
               minutes={calculateWaitTime(selectedService)}
               variant="dark"
               detail={`${selectedService.currentQueue} people ahead • ~${selectedService.avgTime} min per service`}
             />
 
-            {/* Features list */}
             <View style={styles.featureList}>
               <Text style={styles.featureItem}>
-                Get SMS updates on your position
+                SMS updates sent to {phoneNumber}
               </Text>
               <Text style={styles.featureItem}>
                 Running late? Use "Snooze" to hold your spot
@@ -178,72 +225,75 @@ export default function CustomerPortal() {
               </Text>
             </View>
 
+            {error && (
+              <Text style={styles.errorText}>{error}</Text>
+            )}
+
             <TouchableOpacity
-              style={styles.primaryButton}
+              style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]}
               onPress={() => joinQueue()}
+              disabled={isLoading}
               activeOpacity={0.7}
             >
-              <Text style={styles.primaryButtonText}>Join the Queue</Text>
+              <Text style={styles.primaryButtonText}>
+                {isLoading ? 'Joining...' : 'Join the Queue'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Step 3: waiting in queue */}
-        {(currentStep === 'waiting' || currentStep === 'snoozed') &&
-          selectedService && (
-            <View style={styles.card}>
-              {/* Snooze confirmation banner */}
-              {currentStep === 'snoozed' && (
-                <View style={styles.snoozeBanner}>
-                  <Text style={styles.snoozeBannerText}>
-                    You've been moved back {SNOOZE_OPTIONS[snoozeIndex].label}
-                  </Text>
-                </View>
-              )}
-
-              {/* Position indicator */}
-              <PositionIndicator position={queuePosition || 1} />
-
-              <Text style={styles.waitingTitle}>You're in the queue!</Text>
-              <Text style={styles.waitingService}>{selectedService.name}</Text>
-
-              {/* Wait time */}
-              <WaitTimeDisplay
-                minutes={estimatedWait || 0}
-                label="estimated"
-                variant="light"
-              />
-
-              {/* Progress bar */}
-              <ProgressBar
-                position={queuePosition || 1}
-                totalAhead={selectedService.currentQueue}
-              />
-
-              {/* Action buttons */}
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={styles.snoozeButton}
-                  onPress={() => setShowSnoozeModal(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.snoozeButtonText}>Running Late?</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.leaveButton}
-                  onPress={leaveQueue}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.leaveButtonText}>Leave Queue</Text>
-                </TouchableOpacity>
+        {(currentStep === 'waiting' || currentStep === 'snoozed') && selectedService && (
+          <View style={styles.card}>
+            {currentStep === 'snoozed' && (
+              <View style={styles.snoozeBanner}>
+                <Text style={styles.snoozeBannerText}>
+                  You've been moved back {SNOOZE_OPTIONS[snoozeIndex].label}
+                </Text>
               </View>
+            )}
 
-              <Text style={styles.smsNote}>
-                We'll text you when you're next!
-              </Text>
+            <PositionIndicator position={queuePosition || 1} />
+
+            <Text style={styles.waitingTitle}>
+              You're in the queue, {customerName.split(' ')[0]}!
+            </Text>
+            <Text style={styles.waitingService}>{selectedService.name}</Text>
+
+            <WaitTimeDisplay
+              minutes={estimatedWait || 0}
+              label="estimated"
+              variant="light"
+            />
+
+            <ProgressBar
+              position={queuePosition || 1}
+              totalAhead={selectedService.currentQueue}
+            />
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.snoozeButton}
+                onPress={() => setShowSnoozeModal(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.snoozeButtonText}>Running Late?</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.leaveButton}
+                onPress={leaveQueue}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.leaveButtonText}>Leave Queue</Text>
+              </TouchableOpacity>
             </View>
-          )}
+
+            <Text style={styles.smsNote}>
+              We'll text {phoneNumber} when you're next!
+            </Text>
+          </View>
+        )}
 
         {/* Step 4: it's their turn */}
         {currentStep === 'called' && selectedService && (
@@ -252,7 +302,9 @@ export default function CustomerPortal() {
               <Text style={styles.calledIconText}>!</Text>
             </View>
 
-            <Text style={styles.calledTitle}>You're Up Next!</Text>
+            <Text style={styles.calledTitle}>
+              {customerName.split(' ')[0]}, You're Up!
+            </Text>
             <Text style={styles.calledSubtitle}>
               Please head to the front desk
             </Text>
@@ -350,6 +402,54 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     marginBottom: Spacing.lg,
   },
+  textInput: {
+    borderWidth: 2,
+    borderColor: Colors.light.inputBorder,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    fontSize: 15,
+    color: Colors.light.text,
+    marginBottom: Spacing.md,
+  },
+  textAreaInput: {
+    borderWidth: 2,
+    borderColor: Colors.light.inputBorder,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    fontSize: 15,
+    color: Colors.light.text,
+    minHeight: 120,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.md,
+  },
+  smsNote: {
+    fontSize: 13,
+    color: Colors.light.icon,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  primaryButton: {
+    backgroundColor: Colors.light.tint,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md + 2,
+    alignItems: 'center',
+  },
+  primaryButtonDisabled: {
+    opacity: 0.5,
+  },
+  primaryButtonText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  backButton: {
+    paddingVertical: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  backButtonText: {
+    fontSize: 14,
+    color: Colors.light.icon,
+  },
   describeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,39 +492,6 @@ const styles = StyleSheet.create({
     width: '50%',
     padding: Spacing.xs,
   },
-  backButton: {
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  backButtonText: {
-    fontSize: 14,
-    color: Colors.light.icon,
-  },
-  textInput: {
-    borderWidth: 2,
-    borderColor: Colors.light.inputBorder,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    fontSize: 15,
-    color: Colors.light.text,
-    minHeight: 120,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  primaryButton: {
-    backgroundColor: Colors.light.tint,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md + 2,
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.5,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-  },
   confirmTitle: {
     fontSize: 26,
     fontWeight: '700',
@@ -436,6 +503,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.light.icon,
     fontStyle: 'italic',
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
     textAlign: 'center',
     marginBottom: Spacing.md,
   },
@@ -502,11 +575,6 @@ const styles = StyleSheet.create({
     color: Colors.light.dangerText,
     fontWeight: '600',
     fontSize: 14,
-  },
-  smsNote: {
-    fontSize: 14,
-    color: Colors.light.icon,
-    textAlign: 'center',
   },
   calledCard: {
     backgroundColor: Colors.light.tint,

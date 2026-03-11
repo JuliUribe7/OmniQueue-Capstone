@@ -4,8 +4,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Base URL for the backend API
-// set EXPO_PUBLIC_API_URL in your .env file, falls back to localhost for local dev
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
+// points to the deployed backend — works from anywhere, no local network needed
+// set EXPO_PUBLIC_API_URL in your .env to override
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.12.74';
 
 // types — match the backend's Prisma models
 
@@ -16,198 +17,91 @@ export interface Service {
   currentQueue: number; // how many people currently waiting
 }
 
+// Ticket shape returned from the real backend
 export interface Ticket {
   id: string;
   serviceId: string;
-  serviceName: string;
   position: number;
-  estimatedWait: number;
-  status: 'waiting' | 'snoozed' | 'active' | 'served' | 'canceled';
+  status: 'Waiting' | 'Called' | 'Served' | 'Canceled';
+  customerToken: string;
   phoneNumber?: string;
-}
-
-export interface QueueStatus {
-  position: number;
-  estimatedWait: number;
-  status: 'waiting' | 'snoozed' | 'active' | 'served' | 'canceled';
-  aheadCount: number;
-}
-
-// grab auth token from storage
-async function getAuthToken(): Promise<string | null> {
-  return await AsyncStorage.getItem('omniqueue_session');
+  createdAt: string;
+  updatedAt: string;
 }
 
 // API functions
 
 /**
- * Fetch all available services/queues for a business
- * Called when user first opens the app after scanning QR code
- */
-export async function getServices(businessId: string): Promise<Service[]> {
-  try {
-    const response = await fetch(`${API_BASE_URL}/queues/${businessId}/services`);
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch services');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching services:', error);
-    throw error;
-  }
-}
-
-/**
  * Join a queue for a specific service
- * Creates a Ticket in the database and triggers SMS confirmation if phone provided
+ * POST /api/queues/:serviceId/join
+ * Returns the ticket and a customerToken we use to poll status later
  */
 export async function joinQueue(
   serviceId: string,
   phoneNumber?: string
-): Promise<Ticket> {
-  try {
-    const token = await getAuthToken();
+): Promise<{ ticket: Ticket; customerToken: string }> {
+  // generate or reuse a token so the customer can be identified across sessions
+  const existing = await AsyncStorage.getItem('omniqueue_customer_token');
+  const customerToken = existing || undefined;
 
-    const response = await fetch(`${API_BASE_URL}/queues/join`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ serviceId, phoneNumber }),
-    });
+  const response = await fetch(`${API_BASE_URL}/api/queues/${serviceId}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phoneNumber, customerToken }),
+  });
 
-    if (!response.ok) {
-      throw new Error('Failed to join queue');
-    }
-
-    const ticket = await response.json();
-
-    // Save ticket locally so we can recover if app closes
-    await AsyncStorage.setItem('omniqueue_ticket', JSON.stringify(ticket));
-
-    return ticket;
-  } catch (error) {
-    console.error('Error joining queue:', error);
-    throw error;
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`${response.status} ${body}`);
   }
+
+  const data = await response.json();
+
+  // save the token so we can look up status if the app closes and reopens
+  await AsyncStorage.setItem('omniqueue_customer_token', data.customerToken);
+  await AsyncStorage.setItem('omniqueue_service_id', serviceId);
+
+  return data;
 }
 
 /**
- * Get current status of a ticket (position, wait time, etc.)
- * Called periodically to update the waiting screen
+ * Get current ticket status using the customerToken
+ * GET /api/entries/:token
  */
-export async function getQueueStatus(ticketId: string): Promise<QueueStatus> {
-  try {
-    const token = await getAuthToken();
+export async function getQueueStatus(customerToken: string): Promise<Ticket | null> {
+  const response = await fetch(`${API_BASE_URL}/api/entries/${customerToken}`);
 
-    const response = await fetch(`${API_BASE_URL}/queues/status/${ticketId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Failed to fetch queue status');
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch queue status');
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching queue status:', error);
-    throw error;
-  }
+  const data = await response.json();
+  return data.ticket;
 }
 
 /**
- * Snooze a ticket - move back in the queue
- * Called when user is running late and needs more time
+ * Get stored customerToken — used when app reopens to restore the waiting screen
  */
-export async function snoozeTicket(
-  ticketId: string,
-  minutes: number
-): Promise<Ticket> {
+export async function getStoredSession(): Promise<{ customerToken: string; serviceId: string } | null> {
   try {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/queues/snooze`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ticketId, minutes }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to snooze ticket');
-    }
-
-    const ticket = await response.json();
-
-    // Update stored ticket
-    await AsyncStorage.setItem('omniqueue_ticket', JSON.stringify(ticket));
-
-    return ticket;
-  } catch (error) {
-    console.error('Error snoozing ticket:', error);
-    throw error;
-  }
-}
-
-/**
- * Cancel a ticket - leave the queue entirely
- */
-export async function cancelTicket(ticketId: string): Promise<void> {
-  try {
-    const token = await getAuthToken();
-
-    const response = await fetch(`${API_BASE_URL}/queues/cancel`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ ticketId }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to cancel ticket');
-    }
-
-    // Clear stored ticket
-    await AsyncStorage.removeItem('omniqueue_ticket');
-  } catch (error) {
-    console.error('Error canceling ticket:', error);
-    throw error;
-  }
-}
-
-/**
- * Get any existing ticket from storage
- * Used when app reopens to restore user's place in line
- */
-export async function getStoredTicket(): Promise<Ticket | null> {
-  try {
-    const data = await AsyncStorage.getItem('omniqueue_ticket');
-    return data ? JSON.parse(data) : null;
-  } catch (error) {
-    console.error('Error getting stored ticket:', error);
+    const customerToken = await AsyncStorage.getItem('omniqueue_customer_token');
+    const serviceId = await AsyncStorage.getItem('omniqueue_service_id');
+    if (customerToken && serviceId) return { customerToken, serviceId };
+    return null;
+  } catch {
     return null;
   }
 }
 
 /**
- * Clear stored ticket data
- * Called after ticket is completed or canceled
+ * Clear stored session data when leaving the queue
  */
-export async function clearStoredTicket(): Promise<void> {
-  await AsyncStorage.removeItem('omniqueue_ticket');
+export async function clearStoredSession(): Promise<void> {
+  await AsyncStorage.multiRemove(['omniqueue_customer_token', 'omniqueue_service_id']);
 }
 
 
 // mock data — remove once the backend is connected
+// note: there's no /services endpoint on the backend yet, so we keep this for now
 
 export const MOCK_SERVICES: Service[] = [
   { id: '1', name: 'Haircut', avgTime: 25, currentQueue: 4 },
@@ -223,11 +117,12 @@ export function mockJoinQueue(service: Service, phoneNumber?: string): Ticket {
   return {
     id: `ticket_${Date.now()}`,
     serviceId: service.id,
-    serviceName: service.name,
     position: service.currentQueue + 1,
-    estimatedWait: service.avgTime * service.currentQueue,
-    status: 'waiting',
+    status: 'Waiting',
+    customerToken: `mock_token_${Date.now()}`,
     phoneNumber,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
