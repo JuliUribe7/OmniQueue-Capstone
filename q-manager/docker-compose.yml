@@ -4,7 +4,7 @@ services:
     ports:
       - "4000:4000"
     environment:
-      - DATABASE_URL=postgresql://omniman:CapstonE2026$@db:5432/team3_db
+      - DATABASE_URL=postgresql://omniman:${POSTGRES_PASSWORD}@db:5432/team3_db
     depends_on:
       db:
         condition: service_healthy
@@ -14,7 +14,7 @@ services:
     image: postgres:18
     environment:
       POSTGRES_USER: omniman
-      POSTGRES_PASSWORD: CapstonE2026$
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: team3_db
     ports:
       - "5432:5432"
