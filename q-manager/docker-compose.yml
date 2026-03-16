@@ -1,0 +1,31 @@
+services:
+  backend:
+    image: dev.noblesolutionsenterprises.com/omniqueue3/q-manager-backend:latest
+    ports:
+      - "4000:4000"
+    environment:
+      - DATABASE_URL=postgresql://omniman:CapstonE2026$@db:5432/team3_db
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: omniman
+      POSTGRES_PASSWORD: CapstonE2026$
+      POSTGRES_DB: team3_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniman -d team3_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
