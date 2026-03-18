@@ -13,9 +13,11 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@better-auth/infra": "^0.1.12",
     "@prisma/client": "^5.22.0",
+    "better-auth": "^1.5.5",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
+    "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.0",
     "uuid": "^9.0.0"
