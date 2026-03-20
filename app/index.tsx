@@ -1,7 +1,7 @@
 // Main screen — the customer portal
-// Flow: contact info → select service → confirm → waiting → called
+// Flow: contact info → select service → confirm → /waiting (separate page)
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,13 @@ import {
   StyleSheet,
   SafeAreaView,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+
 import { Colors, BorderRadius, Spacing } from '@/constants/theme';
 import {
   ServiceCard,
-  PositionIndicator,
   WaitTimeDisplay,
-  ProgressBar,
   SnoozeModal,
 } from '@/components/queue';
 import {
@@ -31,6 +31,7 @@ import {
 const BUSINESS_NAME = "Classic Cuts Barbershop";
 
 export default function CustomerPortal() {
+  const router = useRouter();
   const {
     currentStep,
     services,
@@ -57,6 +58,13 @@ export default function CustomerPortal() {
 
   const [showSnoozeModal, setShowSnoozeModal] = useState(false);
   const [snoozeIndex, setSnoozeIndex] = useState(0);
+
+  // Navigate to /waiting once the customer joins the queue
+  useEffect(() => {
+    if (currentStep === 'waiting' || currentStep === 'called') {
+      router.replace('/waiting');
+    }
+  }, [currentStep]);
 
   const contactReady = customerName.trim().length > 0 && phoneNumber.trim().length >= 10;
 
@@ -244,33 +252,43 @@ export default function CustomerPortal() {
 
         {/* Step 3: waiting in queue */}
         {(currentStep === 'waiting' || currentStep === 'snoozed') && selectedService && (
-          <View style={styles.card}>
+          <View style={styles.waitingCard}>
+
+            {/* Green check + success message */}
+            <View style={styles.successIconWrap}>
+              <Text style={styles.successIcon}>✓</Text>
+            </View>
+            <Text style={styles.successTitle}>You're in the queue!</Text>
+            <Text style={styles.successName}>{customerName.split(' ')[0]} • {selectedService.name}</Text>
+
             {currentStep === 'snoozed' && (
               <View style={styles.snoozeBanner}>
                 <Text style={styles.snoozeBannerText}>
-                  You've been moved back {SNOOZE_OPTIONS[snoozeIndex].label}
+                  Spot moved back {SNOOZE_OPTIONS[snoozeIndex].label}
                 </Text>
               </View>
             )}
 
-            <PositionIndicator position={queuePosition || 1} />
+            {/* Position */}
+            <View style={styles.positionRow}>
+              <View style={styles.positionBox}>
+                <Text style={styles.positionNumber}>{queuePosition || 1}</Text>
+                <Text style={styles.positionLabel}>in line</Text>
+              </View>
+              <View style={styles.dividerLine} />
+              <View style={styles.waitBox}>
+                <Text style={styles.waitNumber}>
+                  {estimatedWait != null ? formatWaitTime(estimatedWait) : '—'}
+                </Text>
+                <Text style={styles.waitLabel}>estimated wait</Text>
+              </View>
+            </View>
 
-            <Text style={styles.waitingTitle}>
-              You're in the queue, {customerName.split(' ')[0]}!
+            <Text style={styles.smsNote}>
+              We'll text {phoneNumber} when you're up
             </Text>
-            <Text style={styles.waitingService}>{selectedService.name}</Text>
 
-            <WaitTimeDisplay
-              minutes={estimatedWait || 0}
-              label="estimated"
-              variant="light"
-            />
-
-            <ProgressBar
-              position={queuePosition || 1}
-              totalAhead={selectedService.currentQueue}
-            />
-
+            {/* Action buttons */}
             <View style={styles.actionButtons}>
               <TouchableOpacity
                 style={styles.snoozeButton}
@@ -288,10 +306,6 @@ export default function CustomerPortal() {
                 <Text style={styles.leaveButtonText}>Leave Queue</Text>
               </TouchableOpacity>
             </View>
-
-            <Text style={styles.smsNote}>
-              We'll text {phoneNumber} when you're next!
-            </Text>
           </View>
         )}
 
@@ -637,6 +651,82 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
+  },
+  // waiting screen (new design)
+  waitingCard: {
+    backgroundColor: Colors.light.background,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
+    alignItems: 'center',
+  },
+  successIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#22c55e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  successIcon: {
+    fontSize: 40,
+    color: '#fff',
+    fontWeight: '700',
+  },
+  successTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.light.text,
+    marginBottom: 4,
+  },
+  successName: {
+    fontSize: 15,
+    color: Colors.light.icon,
+    marginBottom: Spacing.lg,
+  },
+  positionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  positionBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  positionNumber: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: Colors.light.tint,
+    lineHeight: 52,
+  },
+  positionLabel: {
+    fontSize: 13,
+    color: Colors.light.icon,
+    marginTop: 4,
+  },
+  dividerLine: {
+    width: 1,
+    height: 60,
+    backgroundColor: Colors.light.inputBorder,
+    marginHorizontal: Spacing.md,
+  },
+  waitBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  waitNumber: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: Colors.light.text,
+  },
+  waitLabel: {
+    fontSize: 13,
+    color: Colors.light.icon,
+    marginTop: 4,
   },
   footer: {
     padding: Spacing.lg,

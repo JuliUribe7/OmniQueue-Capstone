@@ -6,38 +6,36 @@ import {
   Service,
   Ticket,
   MOCK_SERVICES,
-  mockJoinQueue,
   joinQueue as apiJoinQueue,
   getQueueStatus,
   getStoredSession,
   clearStoredSession,
   estimateServiceFromDescription,
 } from '../services/queueService';
+import { queueStore } from '../store/queueStore';
 
 // Snooze time options (15 min increments up to 2 hours)
 export const SNOOZE_OPTIONS = [
-  { value: 15, label: '15 min' },
-  { value: 30, label: '30 min' },
-  { value: 45, label: '45 min' },
-  { value: 60, label: '1 hr' },
-  { value: 75, label: '1 hr 15 min' },
-  { value: 90, label: '1 hr 30 min' },
+  { value: 15,  label: '15 min' },
+  { value: 30,  label: '30 min' },
+  { value: 45,  label: '45 min' },
+  { value: 60,  label: '1 hr' },
+  { value: 75,  label: '1 hr 15 min' },
+  { value: 90,  label: '1 hr 30 min' },
   { value: 105, label: '1 hr 45 min' },
   { value: 120, label: '2 hr' },
 ];
 
-// The different screens/steps in the customer flow
 export type QueueStep =
-  | 'contact'   // entering name and phone number (first screen)
-  | 'select'    // choosing a service
-  | 'describe'  // typing what they need
-  | 'confirm'   // reviewing before joining
-  | 'waiting'   // in the queue
-  | 'called'    // it's their turn
-  | 'snoozed';  // just used snooze (brief state)
+  | 'contact'
+  | 'select'
+  | 'describe'
+  | 'confirm'
+  | 'waiting'
+  | 'called'
+  | 'snoozed';
 
 interface UseQueueReturn {
-  // Current state
   currentStep: QueueStep;
   services: Service[];
   selectedService: Service | null;
@@ -49,8 +47,6 @@ interface UseQueueReturn {
   estimatedWait: number | null;
   isLoading: boolean;
   error: string | null;
-
-  // Actions
   setCurrentStep: (step: QueueStep) => void;
   setCustomerName: (name: string) => void;
   setPhoneNumber: (phone: string) => void;
@@ -64,11 +60,46 @@ interface UseQueueReturn {
   goBack: () => void;
 }
 
-// flip to true to use mock data instead of the real backend
-const USE_MOCK = true; // flip to false once backend is deployed
+// flip to false once backend is deployed
+const USE_MOCK = true;
+
+// localStorage key for persisting the customer's active session across refreshes
+const SESSION_KEY = 'omniqueue_customer_session';
+
+interface MockSession {
+  ticketId: string;
+  customerName: string;
+  phoneNumber: string;
+  serviceId: string;
+}
+
+function saveMockSession(session: MockSession) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    }
+  } catch {}
+}
+
+function loadMockSession(): MockSession | null {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const s = localStorage.getItem(SESSION_KEY);
+      if (s) return JSON.parse(s);
+    }
+  } catch {}
+  return null;
+}
+
+function clearMockSession() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(SESSION_KEY);
+    }
+  } catch {}
+}
 
 export function useQueue(): UseQueueReturn {
-  // State
   const [currentStep, setCurrentStep] = useState<QueueStep>('contact');
   const [services] = useState<Service[]>(MOCK_SERVICES);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -76,18 +107,40 @@ export function useQueue(): UseQueueReturn {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [description, setDescription] = useState('');
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [myTicketId, setMyTicketId] = useState<string | null>(null);
   const [customerToken, setCustomerToken] = useState<string | null>(null);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const [estimatedWait, setEstimatedWait] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Check for existing session on mount (in case app was closed mid-queue)
+  // Restore customer session on mount (survives browser refresh)
   useEffect(() => {
+    if (USE_MOCK) {
+      const session = loadMockSession();
+      if (!session) return;
+
+      const storeTicket = queueStore.getTicketById(session.ticketId);
+      if (storeTicket && storeTicket.status !== 'Served' && storeTicket.status !== 'Canceled') {
+        const service = MOCK_SERVICES.find(s => s.id === session.serviceId) || null;
+        setMyTicketId(session.ticketId);
+        setCustomerName(session.customerName);
+        setPhoneNumber(session.phoneNumber);
+        setSelectedService(service);
+        setQueuePosition(storeTicket.position);
+        setEstimatedWait(storeTicket.estimatedWait);
+        setCurrentStep(storeTicket.status === 'Called' ? 'called' : 'waiting');
+      } else {
+        // ticket no longer exists or was served — clear stale session
+        clearMockSession();
+      }
+      return;
+    }
+
+    // real backend session restore
     async function restoreSession() {
       const session = await getStoredSession();
       if (!session) return;
-
       const liveTicket = await getQueueStatus(session.customerToken);
       if (liveTicket && liveTicket.status === 'Waiting') {
         const matchedService = MOCK_SERVICES.find(s => s.id === session.serviceId) || null;
@@ -102,17 +155,47 @@ export function useQueue(): UseQueueReturn {
     restoreSession();
   }, []);
 
-  // Poll the real backend every 10s for live position updates when waiting
+  // Subscribe to store changes — updates position and wait time when staff marks someone done.
+  // Also fires when another browser tab changes localStorage (cross-tab sync via storage event).
+  useEffect(() => {
+    if (!USE_MOCK || !myTicketId) return;
+
+    const unsubscribe = queueStore.subscribe(() => {
+      const updated = queueStore.getTicketById(myTicketId);
+      if (!updated) return;
+      setQueuePosition(updated.position);
+      setEstimatedWait(updated.estimatedWait);
+      if (updated.status === 'Called') setCurrentStep('called');
+    });
+
+    return unsubscribe;
+  }, [myTicketId]);
+
+  // Countdown timer — ticks down estimatedWait by 1 every real minute
+  // Gives the customer a live countdown between store updates
+  useEffect(() => {
+    if (currentStep !== 'waiting' && currentStep !== 'snoozed') return;
+    if (estimatedWait === null || estimatedWait <= 0) return;
+
+    const timer = setInterval(() => {
+      setEstimatedWait(prev => {
+        if (prev === null || prev <= 1) return 0;
+        return prev - 1;
+      });
+    }, 60000); // tick every real minute
+
+    return () => clearInterval(timer);
+  }, [currentStep, estimatedWait]);
+
+  // Poll real backend every 10s when waiting (live backend only)
   useEffect(() => {
     if (currentStep !== 'waiting' || !customerToken || USE_MOCK) return;
 
     const interval = setInterval(async () => {
       const updated = await getQueueStatus(customerToken);
       if (!updated) return;
-
       setTicket(updated);
       setQueuePosition(updated.position);
-
       if (updated.status === 'Called') {
         setCurrentStep('called');
         clearInterval(interval);
@@ -122,79 +205,70 @@ export function useQueue(): UseQueueReturn {
     return () => clearInterval(interval);
   }, [currentStep, customerToken]);
 
-  // Simulate queue movement in mock mode (for demo without backend)
-  useEffect(() => {
-    if (!USE_MOCK) return;
-    if (currentStep === 'waiting' && queuePosition && queuePosition > 1 && selectedService) {
-      const timer = setInterval(() => {
-        setQueuePosition(prev => {
-          if (!prev || prev <= 1) {
-            setCurrentStep('called');
-            clearInterval(timer);
-            return 1;
-          }
-          setEstimatedWait(wait => Math.max(0, (wait || 0) - selectedService.avgTime));
-          return prev - 1;
-        });
-      }, 8000);
-
-      return () => clearInterval(timer);
-    }
-  }, [currentStep, queuePosition, selectedService]);
-
-  // Trigger "called" when position reaches 1 in mock mode
-  useEffect(() => {
-    if (USE_MOCK && queuePosition === 1 && currentStep === 'waiting') {
-      setCurrentStep('called');
-    }
-  }, [queuePosition, currentStep]);
-
-  // Actions
-
-  // Customer submitted their name and phone number
   const submitContact = useCallback(() => {
-    if (customerName.trim() && phoneNumber.trim()) {
-      setCurrentStep('select');
-    }
+    if (customerName.trim() && phoneNumber.trim()) setCurrentStep('select');
   }, [customerName, phoneNumber]);
 
-  // User selected a service from the grid
   const selectService = useCallback((service: Service) => {
     setSelectedService(service);
     setCurrentStep('confirm');
   }, []);
 
-  // User submitted their description
   const submitDescription = useCallback(() => {
     if (description.trim()) {
       const estimatedService = estimateServiceFromDescription(description);
-      setSelectedService({
-        ...estimatedService,
-        description: description.trim(),
-      } as Service & { description: string });
+      setSelectedService({ ...estimatedService, description: description.trim() } as Service & { description: string });
       setCurrentStep('confirm');
     }
   }, [description]);
 
-  // User confirmed and wants to join the queue
   const joinQueue = useCallback(async () => {
     if (!selectedService) return;
-
     setIsLoading(true);
     setError(null);
 
     try {
       if (USE_MOCK) {
-        const newTicket = mockJoinQueue(selectedService, phoneNumber);
+        const existing = queueStore.getTickets();
+        const nextPosition = existing.length + 1;
+        const lastWait = existing.length > 0 ? existing[existing.length - 1].estimatedWait : 0;
+        const estWait = lastWait + selectedService.avgTime;
+        const ticketId = `ticket_${Date.now()}`;
+
+        queueStore.addTicket({
+          id: ticketId,
+          position: nextPosition,
+          customerName,
+          phoneNumber,
+          serviceName: selectedService.name,
+          serviceId: selectedService.id,
+          serviceAvgTime: selectedService.avgTime,
+          status: 'Waiting',
+          joinedAt: new Date().toISOString(),
+          estimatedWait: estWait,
+        });
+
+        // save session to localStorage so refresh restores the waiting screen
+        saveMockSession({ ticketId, customerName, phoneNumber, serviceId: selectedService.id });
+
+        const newTicket: Ticket = {
+          id: ticketId,
+          serviceId: selectedService.id,
+          position: nextPosition,
+          status: 'Waiting',
+          customerToken: ticketId,
+          phoneNumber,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
         setTicket(newTicket);
-        setQueuePosition(newTicket.position);
-        setEstimatedWait(selectedService.avgTime * selectedService.currentQueue);
+        setMyTicketId(ticketId);
+        setQueuePosition(nextPosition);
+        setEstimatedWait(estWait);
         setCurrentStep('waiting');
       } else {
-        const { ticket: newTicket, customerToken: token } = await apiJoinQueue(
-          selectedService.id,
-          phoneNumber
-        );
+        const { ticket: newTicket, customerToken: token } = await apiJoinQueue(selectedService.id, phoneNumber);
         setTicket(newTicket);
         setCustomerToken(token);
         setQueuePosition(newTicket.position);
@@ -202,102 +276,65 @@ export function useQueue(): UseQueueReturn {
         setCurrentStep('waiting');
       }
     } catch (err: any) {
-      const msg = err?.message || String(err);
-      setError(`Error: ${msg}`);
-      console.error('[joinQueue]', err);
+      setError(`Error: ${err?.message || String(err)}`);
     } finally {
       setIsLoading(false);
     }
-  }, [selectedService, phoneNumber]);
+  }, [selectedService, customerName, phoneNumber]);
 
-  // User wants to snooze their spot — no backend endpoint yet, frontend only
   const snoozeSpot = useCallback((minutes: number) => {
     if (!selectedService || !queuePosition) return;
-
     const spotsToMove = Math.ceil(minutes / selectedService.avgTime);
     setQueuePosition(prev => (prev || 1) + spotsToMove);
     setEstimatedWait(prev => (prev || 0) + minutes);
-
     setCurrentStep('snoozed');
     setTimeout(() => setCurrentStep('waiting'), 2000);
   }, [selectedService, queuePosition]);
 
-  // User wants to leave the queue
   const leaveQueue = useCallback(async () => {
+    if (USE_MOCK && myTicketId) {
+      queueStore.removeTicket(myTicketId);
+      clearMockSession();
+    }
     await clearStoredSession();
-
     setCurrentStep('contact');
     setSelectedService(null);
     setCustomerName('');
     setPhoneNumber('');
     setDescription('');
     setTicket(null);
+    setMyTicketId(null);
     setCustomerToken(null);
     setQueuePosition(null);
     setEstimatedWait(null);
-  }, []);
+  }, [myTicketId]);
 
-  // Handle back navigation
   const goBack = useCallback(() => {
     switch (currentStep) {
-      case 'select':
-        setCurrentStep('contact');
-        break;
-      case 'describe':
-        setCurrentStep('select');
-        break;
+      case 'select':   setCurrentStep('contact'); break;
+      case 'describe': setCurrentStep('select');  break;
       case 'confirm':
-        if ((selectedService as any)?.description) {
-          setCurrentStep('describe');
-        } else {
-          setCurrentStep('select');
-        }
+        setCurrentStep((selectedService as any)?.description ? 'describe' : 'select');
         break;
-      default:
-        setCurrentStep('contact');
+      default: setCurrentStep('contact');
     }
   }, [currentStep, selectedService]);
 
-  // Return everything the components need
   return {
-    currentStep,
-    services,
-    selectedService,
-    customerName,
-    phoneNumber,
-    description,
-    ticket,
-    queuePosition,
-    estimatedWait,
-    isLoading,
-    error,
-    setCurrentStep,
-    setCustomerName,
-    setPhoneNumber,
-    setDescription,
-    submitContact,
-    selectService,
-    submitDescription,
-    joinQueue,
-    snoozeSpot,
-    leaveQueue,
-    goBack,
+    currentStep, services, selectedService, customerName, phoneNumber,
+    description, ticket, queuePosition, estimatedWait, isLoading, error,
+    setCurrentStep, setCustomerName, setPhoneNumber, setDescription,
+    submitContact, selectService, submitDescription, joinQueue,
+    snoozeSpot, leaveQueue, goBack,
   };
 }
 
-
-// helper functions
-
 // format minutes into a readable string e.g. 90 -> "1 hr 30 min"
 export function formatWaitTime(minutes: number): string {
-  if (minutes < 60) {
-    return `${minutes} min`;
-  }
+  if (minutes < 60) return `${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  if (mins === 0) {
-    return `${hours} hr`;
-  }
+  if (mins === 0) return `${hours} hr`;
   return `${hours} hr ${mins} min`;
 }
 

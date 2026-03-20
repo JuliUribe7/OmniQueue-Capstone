@@ -15,6 +15,9 @@ export default function RootLayout() {
         }}
       >
         <Stack.Screen name="index" />
+        <Stack.Screen name="waiting" />
+        <Stack.Screen name="staff-login" />
+        <Stack.Screen name="dashboard" />
       </Stack>
     </View>
   );

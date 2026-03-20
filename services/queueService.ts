@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Base URL for the backend API
 // points to the deployed backend — works from anywhere, no local network needed
 // set EXPO_PUBLIC_API_URL in your .env to override
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.12.74';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
 
 // types — match the backend's Prisma models
 
@@ -97,6 +97,56 @@ export async function getStoredSession(): Promise<{ customerToken: string; servi
  */
 export async function clearStoredSession(): Promise<void> {
   await AsyncStorage.multiRemove(['omniqueue_customer_token', 'omniqueue_service_id']);
+}
+
+
+// Dashboard types and API calls
+
+export interface DashboardTicket {
+  id: string;
+  position: number;
+  customerName: string;
+  phoneNumber: string;
+  serviceName: string;
+  serviceId: string;
+  status: 'Waiting' | 'Called' | 'Served' | 'Canceled';
+  joinedAt: string;
+  estimatedWait: number; // minutes
+}
+
+/**
+ * Get all active tickets for the dashboard
+ * GET /api/queues/dashboard
+ */
+export async function getDashboardTickets(): Promise<DashboardTicket[]> {
+  const response = await fetch(`${API_BASE_URL}/api/queues/dashboard`);
+  if (!response.ok) throw new Error('Failed to fetch dashboard tickets');
+  const data = await response.json();
+  return data.tickets;
+}
+
+/**
+ * Call the next customer for a service
+ * POST /api/queues/:serviceId/call-next
+ */
+export async function callNextCustomer(serviceId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/queues/${serviceId}/call-next`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error('Failed to call next customer');
+}
+
+/**
+ * Mark a ticket as served
+ * PATCH /api/tickets/:ticketId/served
+ */
+export async function markTicketServed(ticketId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/served`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error('Failed to mark ticket as served');
 }
 
 
