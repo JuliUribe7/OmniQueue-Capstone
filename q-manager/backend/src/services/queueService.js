@@ -53,7 +53,6 @@ async function joinQueue(serviceId, customerToken, phoneNumber) {
   if (phoneNumber && telnyx && process.env.TELNYX_API_KEY) {
     const msg = `You've joined ${service.name}. Your position: ${ticket.position}`;
     telnyx.sendSMS(phoneNumber, msg).catch((err) => {
-      // eslint-disable-next-line no-console
       console.error('Telnyx send failed', err);
     });
   }
