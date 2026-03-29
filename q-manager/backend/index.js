@@ -8,6 +8,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Better Auth
+const { toNodeHandler } = require("better-auth/node");
+const { auth } = require("./src/lib/auth");
+app.all("/api/auth/*path", toNodeHandler(auth));
+
 // health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
