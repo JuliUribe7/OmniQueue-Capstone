@@ -11,7 +11,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    build: ./frontend  # your Expo web build
+    build: ..          # Dockerfile is at repo root
     ports:
       - "4003:80"       # 4003 is your team's assigned port
     depends_on:
