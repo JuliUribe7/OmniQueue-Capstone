@@ -10,7 +10,7 @@ app.use(express.json());
 
 // Better Auth
 const { toNodeHandler } = require("better-auth/node");
-const { auth } = require("./src/lib/auth");
+const { auth } = require("./src/auth");
 app.all("/api/auth/*path", toNodeHandler(auth));
 
 // health check
