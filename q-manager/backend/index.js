@@ -3,11 +3,16 @@ const express = require('express');
 const cors = require('cors');
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: ['https://team3.noblesolutionsenterprises.com', 'http://localhost:4003']
+}));
 app.use(express.json());
 
 // health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+const authHandler = require('./src/routes/authRoutes');
+app.all('/api/auth/{*path}', authHandler);
 
 const queueRoutes = require('./src/routes/queueRoutes');
 app.use(queueRoutes);
