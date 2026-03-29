@@ -16,8 +16,6 @@ app.all("/api/auth/*path", toNodeHandler(auth));
 // health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-const authHandler = require('./src/routes/authRoutes');
-app.all('/api/auth/{*path}', authHandler);
 
 const queueRoutes = require('./src/routes/queueRoutes');
 app.use(queueRoutes);
