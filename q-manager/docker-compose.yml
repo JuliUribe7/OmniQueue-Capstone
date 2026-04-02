@@ -1,6 +1,6 @@
 services:
   backend:
-    image: dev.noblesolutionsenterprises.com/omniqueue3/q-manager-backend:latest
+    build: ./backend
     expose:
       - "4000"          # internal only, NOT published to host
     environment:
