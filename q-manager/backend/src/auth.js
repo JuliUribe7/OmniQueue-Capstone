@@ -5,6 +5,11 @@ const auth = betterAuth({
   database: pool,
   baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:4000',
   secret: process.env.BETTER_AUTH_SECRET,
+  trustedOrigins: [
+    'https://team3.noblesolutionsenterprises.com',
+    'http://localhost:4003',
+    'http://localhost:3000',
+  ],
   emailAndPassword: {
     enabled: true,
   },
