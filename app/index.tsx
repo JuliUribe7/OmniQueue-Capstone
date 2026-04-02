@@ -1,744 +1,238 @@
-// Main screen — the customer portal
-// Flow: contact info → select service → confirm → /waiting (separate page)
+// Landing page — business login and signup only
+// Customers access their business directly via QR code link (/:businessId)
+// Super admin has their own separate page at /admin
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  StyleSheet,
-  SafeAreaView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
+import { businessStore } from '../store/businessStore';
 
-import { Colors, BorderRadius, Spacing } from '@/constants/theme';
-import {
-  ServiceCard,
-  WaitTimeDisplay,
-  SnoozeModal,
-} from '@/components/queue';
-import {
-  useQueue,
-  formatWaitTime,
-  calculateWaitTime,
-  SNOOZE_OPTIONS,
-} from '@/hooks/useQueue';
+const LIGHT = {
+  bg: '#f5f7fa', surface: '#ffffff', border: '#e2e8f0',
+  text: '#111827', textSub: '#4b5563', sessionBanner: '#eff6ff',
+  sessionBannerBorder: '#bfdbfe', sessionText: '#1e40af', sessionName: '#111827',
+  primary: '#2563eb', inputBg: '#f9fafb',
+  inputBorder: '#d1d5db', placeholder: '#9ca3af',
+};
+const DARK = {
+  bg: '#151718', surface: '#1e2022', border: '#2a2a2a',
+  text: '#ffffff', textSub: '#888888', sessionBanner: '#1e3a8a',
+  sessionBannerBorder: '#2563eb', sessionText: '#93c5fd', sessionName: '#ffffff',
+  primary: '#2563eb', inputBg: '#2a2d2f',
+  inputBorder: '#333333', placeholder: '#666666',
+};
 
-// Business info - would come from QR code scan in production
-const BUSINESS_NAME = "Classic Cuts Barbershop";
+function readTheme(): boolean {
+  try { return (typeof localStorage !== 'undefined') && localStorage.getItem('omniqueue_theme') === 'dark'; }
+  catch { return false; }
+}
 
-export default function CustomerPortal() {
+export default function LandingPage() {
   const router = useRouter();
-  const {
-    currentStep,
-    services,
-    selectedService,
-    customerName,
-    phoneNumber,
-    description,
-    queuePosition,
-    estimatedWait,
-    isLoading,
-    error,
-    setCurrentStep,
-    setCustomerName,
-    setPhoneNumber,
-    setDescription,
-    submitContact,
-    selectService,
-    submitDescription,
-    joinQueue,
-    snoozeSpot,
-    leaveQueue,
-    goBack,
-  } = useQueue();
 
-  const [showSnoozeModal, setShowSnoozeModal] = useState(false);
-  const [snoozeIndex, setSnoozeIndex] = useState(0);
-
-  // Navigate to /waiting once the customer joins the queue
+  const [isDark, setIsDark] = useState(readTheme);
   useEffect(() => {
-    if (currentStep === 'waiting' || currentStep === 'called') {
-      router.replace('/waiting');
-    }
-  }, [currentStep]);
+    const handler = (e: StorageEvent) => {
+      if (e.key === 'omniqueue_theme') setIsDark(e.newValue === 'dark');
+    };
+    if (typeof window !== 'undefined') window.addEventListener('storage', handler);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('storage', handler); };
+  }, []);
+  function toggleTheme() {
+    const next = !isDark;
+    setIsDark(next);
+    try { if (typeof localStorage !== 'undefined') localStorage.setItem('omniqueue_theme', next ? 'dark' : 'light'); } catch {}
+  }
+  const C = isDark ? DARK : LIGHT;
 
-  const contactReady = customerName.trim().length > 0 && phoneNumber.trim().length >= 10;
+  const [email, setEmail]           = useState('');
+  const [password, setPassword]     = useState('');
+  const [showPass, setShowPass]     = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [loggingIn, setLoggingIn]   = useState(false);
+
+  const [existingSession, setExistingSession] = useState<{ type: string; name: string; id?: string } | null>(null);
+
+  // Check for existing session — show a resume banner
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const session = businessStore.getSession();
+      if (session?.type === 'business') {
+        const biz = businessStore.getById(session.id);
+        if (biz) setExistingSession({ type: 'business', name: biz.name, id: session.id });
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  function handleBusinessLogin() {
+    if (!email.trim() || !password.trim()) {
+      setLoginError('Please enter your email and password.');
+      return;
+    }
+    setLoggingIn(true);
+    setLoginError('');
+    setTimeout(() => {
+      const business = businessStore.login(email.trim(), password);
+      setLoggingIn(false);
+      if (business) {
+        router.replace(`/${business.id}/dashboard` as any);
+      } else {
+        setLoginError('Invalid email or password.');
+      }
+    }, 300);
+  }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
+    <KeyboardAvoidingView
+      style={[styles.root, { backgroundColor: C.bg }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
 
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.businessName}>{BUSINESS_NAME}</Text>
-        <Text style={styles.tagline}>Smart Queue System</Text>
-      </View>
+        {/* Theme toggle */}
+        <View style={styles.themeRow}>
+          <TouchableOpacity onPress={toggleTheme} style={styles.themeBtn}>
+            <Text style={styles.themeBtnText}>{isDark ? '☀️ Light' : '🌙 Dark'}</Text>
+          </TouchableOpacity>
+        </View>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-
-        {/* Step 0: name and phone number */}
-        {currentStep === 'contact' && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Welcome!</Text>
-            <Text style={styles.cardSubtitle}>
-              Enter your details to join the queue and get SMS updates
+        {/* Resume session banner */}
+        {existingSession && (
+          <View style={[styles.sessionBanner, { backgroundColor: C.sessionBanner, borderColor: C.sessionBannerBorder }]}>
+            <Text style={[styles.sessionBannerText, { color: C.sessionText }]}>
+              Logged in as <Text style={[styles.sessionName, { color: C.sessionName }]}>{existingSession.name}</Text>
             </Text>
-
-            <TextInput
-              style={styles.textInput}
-              value={customerName}
-              onChangeText={setCustomerName}
-              placeholder="Your name"
-              placeholderTextColor={Colors.light.icon}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-
-            <TextInput
-              style={styles.textInput}
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              placeholder="Phone number"
-              placeholderTextColor={Colors.light.icon}
-              keyboardType="phone-pad"
-              returnKeyType="done"
-            />
-
-            <Text style={styles.smsNote}>
-              We'll text you when you're almost up
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.primaryButton, !contactReady && styles.primaryButtonDisabled]}
-              onPress={submitContact}
-              disabled={!contactReady}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.primaryButtonText}>Continue</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Step 1: service selection */}
-        {currentStep === 'select' && (
-          <View style={styles.card}>
-            <TouchableOpacity onPress={goBack} style={styles.backButton}>
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.cardTitle}>Hi {customerName.split(' ')[0]}!</Text>
-            <Text style={styles.cardSubtitle}>
-              Choose a service or describe your visit
-            </Text>
-
-            {/* Describe your visit button */}
-            <TouchableOpacity
-              style={styles.describeButton}
-              onPress={() => setCurrentStep('describe')}
-              activeOpacity={0.7}
-            >
-              <View style={styles.describeContent}>
-                <Text style={styles.describeTitle}>Describe your visit</Text>
-                <Text style={styles.describeSubtitle}>
-                  Tell us what you need and we'll estimate your wait
-                </Text>
-              </View>
-              <Text style={styles.describeArrow}>→</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.dividerText}>or choose a service</Text>
-
-            <View style={styles.serviceGrid}>
-              {services.map((service) => (
-                <View key={service.id} style={styles.serviceGridItem}>
-                  <ServiceCard service={service} onPress={selectService} />
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* Step 1b: describe visit */}
-        {currentStep === 'describe' && (
-          <View style={styles.card}>
-            <TouchableOpacity onPress={goBack} style={styles.backButton}>
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.cardTitle}>Describe your visit</Text>
-            <Text style={styles.cardSubtitle}>
-              Tell us what you're looking for today
-            </Text>
-
-            <TextInput
-              style={styles.textAreaInput}
-              value={description}
-              onChangeText={setDescription}
-              placeholder="e.g., I need a haircut and beard trim, just a cleanup..."
-              placeholderTextColor={Colors.light.icon}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-
-            <TouchableOpacity
-              style={[styles.primaryButton, !description.trim() && styles.primaryButtonDisabled]}
-              onPress={submitDescription}
-              disabled={!description.trim()}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.primaryButtonText}>Get Wait Estimate</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Step 2: confirmation before joining */}
-        {currentStep === 'confirm' && selectedService && (
-          <View style={styles.card}>
-            <TouchableOpacity onPress={goBack} style={styles.backButton}>
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.confirmTitle}>{selectedService.name}</Text>
-
-            {(selectedService as any).description && (
-              <Text style={styles.descriptionPreview}>
-                "{(selectedService as any).description}"
-              </Text>
-            )}
-
-            <WaitTimeDisplay
-              minutes={calculateWaitTime(selectedService)}
-              variant="dark"
-              detail={`${selectedService.currentQueue} people ahead • ~${selectedService.avgTime} min per service`}
-            />
-
-            <View style={styles.featureList}>
-              <Text style={styles.featureItem}>
-                SMS updates sent to {phoneNumber}
-              </Text>
-              <Text style={styles.featureItem}>
-                Running late? Use "Snooze" to hold your spot
-              </Text>
-              <Text style={styles.featureItem}>
-                Wait anywhere - we'll notify you
-              </Text>
-            </View>
-
-            {error && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
-
-            <TouchableOpacity
-              style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]}
-              onPress={() => joinQueue()}
-              disabled={isLoading}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.primaryButtonText}>
-                {isLoading ? 'Joining...' : 'Join the Queue'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Step 3: waiting in queue */}
-        {(currentStep === 'waiting' || currentStep === 'snoozed') && selectedService && (
-          <View style={styles.waitingCard}>
-
-            {/* Green check + success message */}
-            <View style={styles.successIconWrap}>
-              <Text style={styles.successIcon}>✓</Text>
-            </View>
-            <Text style={styles.successTitle}>You're in the queue!</Text>
-            <Text style={styles.successName}>{customerName.split(' ')[0]} • {selectedService.name}</Text>
-
-            {currentStep === 'snoozed' && (
-              <View style={styles.snoozeBanner}>
-                <Text style={styles.snoozeBannerText}>
-                  Spot moved back {SNOOZE_OPTIONS[snoozeIndex].label}
-                </Text>
-              </View>
-            )}
-
-            {/* Position */}
-            <View style={styles.positionRow}>
-              <View style={styles.positionBox}>
-                <Text style={styles.positionNumber}>{queuePosition || 1}</Text>
-                <Text style={styles.positionLabel}>in line</Text>
-              </View>
-              <View style={styles.dividerLine} />
-              <View style={styles.waitBox}>
-                <Text style={styles.waitNumber}>
-                  {estimatedWait != null ? formatWaitTime(estimatedWait) : '—'}
-                </Text>
-                <Text style={styles.waitLabel}>estimated wait</Text>
-              </View>
-            </View>
-
-            <Text style={styles.smsNote}>
-              We'll text {phoneNumber} when you're up
-            </Text>
-
-            {/* Action buttons */}
-            <View style={styles.actionButtons}>
+            <View style={styles.sessionBtns}>
               <TouchableOpacity
-                style={styles.snoozeButton}
-                onPress={() => setShowSnoozeModal(true)}
-                activeOpacity={0.7}
+                style={styles.sessionContinueBtn}
+                onPress={() => {
+                  const session = businessStore.getSession();
+                  if (session?.type === 'business') router.replace(`/${session.id}/dashboard` as any);
+                }}
               >
-                <Text style={styles.snoozeButtonText}>Running Late?</Text>
+                <Text style={styles.sessionContinueText}>Continue →</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.leaveButton}
-                onPress={leaveQueue}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.leaveButtonText}>Leave Queue</Text>
+              <TouchableOpacity onPress={() => { businessStore.logout(); setExistingSession(null); }}>
+                <Text style={[styles.sessionLogoutText, { color: C.sessionText }]}>Log out</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* Step 4: it's their turn */}
-        {currentStep === 'called' && selectedService && (
-          <View style={[styles.card, styles.calledCard]}>
-            <View style={styles.calledIcon}>
-              <Text style={styles.calledIconText}>!</Text>
-            </View>
+        <View style={styles.header}>
+          <Text style={[styles.logo, { color: C.text }]}>OmniQueue</Text>
+          <Text style={[styles.tagline, { color: C.textSub }]}>Smart queue management for modern businesses</Text>
+        </View>
 
-            <Text style={styles.calledTitle}>
-              {customerName.split(' ')[0]}, You're Up!
-            </Text>
-            <Text style={styles.calledSubtitle}>
-              Please head to the front desk
-            </Text>
+        <View style={[styles.card, { backgroundColor: C.surface, borderColor: C.border, borderWidth: 1 }]}>
+          <Text style={[styles.cardTitle, { color: C.text }]}>Business Login</Text>
+          <Text style={[styles.cardSubtitle, { color: C.textSub }]}>Sign in to manage your queue and services.</Text>
 
-            <View style={styles.calledService}>
-              <Text style={styles.calledServiceText}>
-                {selectedService.name}
-              </Text>
-            </View>
+          <Text style={[styles.label, { color: C.textSub }]}>Email</Text>
+          <TextInput
+            style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+            placeholder="you@yourbusiness.com"
+            placeholderTextColor={C.placeholder}
+            value={email}
+            onChangeText={t => { setEmail(t); setLoginError(''); }}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
 
-            <TouchableOpacity
-              style={styles.calledSnoozeButton}
-              onPress={() => setShowSnoozeModal(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.calledSnoozeButtonText}>
-                Need a few more minutes?
-              </Text>
+          <Text style={[styles.label, { color: C.textSub }]}>Password</Text>
+          <View style={styles.passwordRow}>
+            <TextInput
+              style={[styles.input, styles.passwordInput, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+              placeholder="Password"
+              placeholderTextColor={C.placeholder}
+              value={password}
+              onChangeText={t => { setPassword(t); setLoginError(''); }}
+              secureTextEntry={!showPass}
+            />
+            <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowPass(v => !v)}>
+              <Text style={styles.eyeIcon}>{showPass ? '🙈' : '👁️'}</Text>
             </TouchableOpacity>
-
-            <Text style={styles.calledNote}>
-              Reply "DELAY" to your SMS to snooze
-            </Text>
           </View>
-        )}
+
+          {loginError ? <Text style={styles.error}>{loginError}</Text> : null}
+
+          <TouchableOpacity
+            style={[styles.primaryBtn, loggingIn && styles.primaryBtnDisabled]}
+            onPress={handleBusinessLogin}
+            disabled={loggingIn}
+          >
+            {loggingIn
+              ? <ActivityIndicator color="#fff" />
+              : <Text style={styles.primaryBtnText}>Log In</Text>
+            }
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={() => router.push('/signup' as any)} style={styles.linkBtn}>
+            <Text style={[styles.linkText, { color: C.primary }]}>Don't have an account? Sign up →</Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
-
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Powered by <Text style={styles.footerBold}>OmniQueue</Text>
-        </Text>
-      </View>
-
-      {/* Snooze Modal */}
-      <SnoozeModal
-        visible={showSnoozeModal}
-        onClose={() => setShowSnoozeModal(false)}
-        onSnooze={(minutes) => {
-          const index = SNOOZE_OPTIONS.findIndex((o) => o.value === minutes);
-          setSnoozeIndex(index >= 0 ? index : 0);
-          snoozeSpot(minutes);
-        }}
-      />
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
 
-// styles
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.dark.background,
+  root: { flex: 1, backgroundColor: '#151718' },
+  scroll: { flexGrow: 1, alignItems: 'center', paddingVertical: 60, paddingHorizontal: 24 },
+
+  sessionBanner: {
+    backgroundColor: '#1e3a8a', borderRadius: 12, padding: 16,
+    width: '100%', maxWidth: 420, marginBottom: 20,
+    borderWidth: 1, borderColor: '#2563eb',
   },
-  header: {
-    padding: Spacing.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  sessionBannerText: { color: '#93c5fd', fontSize: 14, marginBottom: 12 },
+  sessionName: { fontWeight: '700', color: '#fff' },
+  sessionBtns: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  sessionContinueBtn: {
+    backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8,
   },
-  businessName: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.dark.text,
-    letterSpacing: -0.5,
-  },
-  tagline: {
-    fontSize: 14,
-    color: Colors.dark.icon,
-    marginTop: 4,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: Spacing.lg,
-    paddingBottom: Spacing.xl,
-  },
+  sessionContinueText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  sessionLogoutText: { color: '#93c5fd', fontSize: 14 },
+
+  header: { alignItems: 'center', marginBottom: 36 },
+  logo: { fontSize: 36, fontWeight: '800', color: '#fff', letterSpacing: -1 },
+  tagline: { fontSize: 15, color: '#888', marginTop: 8, textAlign: 'center' },
+
   card: {
-    backgroundColor: Colors.light.background,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
+    backgroundColor: '#1e2022', borderRadius: 16, padding: 24,
+    width: '100%', maxWidth: 420, marginBottom: 16,
   },
-  cardTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.light.text,
-    textAlign: 'center',
-    letterSpacing: -0.5,
+  cardTitle: { fontSize: 20, fontWeight: '700', color: '#fff', marginBottom: 6 },
+  cardSubtitle: { fontSize: 14, color: '#888', marginBottom: 20, lineHeight: 20 },
+
+  label: { fontSize: 13, fontWeight: '600', color: '#ccc', marginBottom: 6 },
+  input: {
+    backgroundColor: '#2a2d2f', borderRadius: 10, paddingHorizontal: 14,
+    paddingVertical: 12, color: '#fff', fontSize: 15, marginBottom: 14,
+    borderWidth: 1, borderColor: '#333',
   },
-  cardSubtitle: {
-    fontSize: 15,
-    color: Colors.light.icon,
-    textAlign: 'center',
-    marginTop: Spacing.sm,
-    marginBottom: Spacing.lg,
+  error: { color: '#f87171', fontSize: 13, marginBottom: 12, marginTop: -8 },
+
+  primaryBtn: {
+    backgroundColor: '#2563eb', borderRadius: 10,
+    paddingVertical: 14, alignItems: 'center', marginTop: 4,
   },
-  textInput: {
-    borderWidth: 2,
-    borderColor: Colors.light.inputBorder,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    fontSize: 15,
-    color: Colors.light.text,
-    marginBottom: Spacing.md,
-  },
-  textAreaInput: {
-    borderWidth: 2,
-    borderColor: Colors.light.inputBorder,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    fontSize: 15,
-    color: Colors.light.text,
-    minHeight: 120,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.md,
-  },
-  smsNote: {
-    fontSize: 13,
-    color: Colors.light.icon,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  primaryButton: {
-    backgroundColor: Colors.light.tint,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md + 2,
-    alignItems: 'center',
-  },
-  primaryButtonDisabled: {
-    opacity: 0.5,
-  },
-  primaryButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  backButton: {
-    paddingVertical: Spacing.sm,
-    marginBottom: Spacing.md,
-  },
-  backButtonText: {
-    fontSize: 14,
-    color: Colors.light.icon,
-  },
-  describeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderWidth: 2,
-    borderColor: Colors.light.tint,
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md + 4,
-    marginBottom: Spacing.md,
-  },
-  describeContent: {
-    flex: 1,
-  },
-  describeTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.light.text,
-  },
-  describeSubtitle: {
-    fontSize: 13,
-    color: Colors.light.icon,
-    marginTop: 4,
-  },
-  describeArrow: {
-    fontSize: 20,
-    color: Colors.light.tint,
-  },
-  dividerText: {
-    textAlign: 'center',
-    fontSize: 13,
-    color: Colors.light.icon,
-    marginVertical: Spacing.md,
-  },
-  serviceGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -Spacing.xs,
-  },
-  serviceGridItem: {
-    width: '50%',
-    padding: Spacing.xs,
-  },
-  confirmTitle: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: Colors.light.text,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  descriptionPreview: {
-    fontSize: 14,
-    color: Colors.light.icon,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  errorText: {
-    color: '#dc2626',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  featureList: {
-    marginBottom: Spacing.lg,
-  },
-  featureItem: {
-    fontSize: 14,
-    color: Colors.light.icon,
-    paddingVertical: Spacing.sm + 4,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.light.inputBorder,
-  },
-  snoozeBanner: {
-    backgroundColor: Colors.light.successBackground,
-    padding: Spacing.sm + 4,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.md,
-  },
-  snoozeBannerText: {
-    color: Colors.light.successText,
-    fontWeight: '600',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  waitingTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: Colors.light.text,
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  waitingService: {
-    fontSize: 15,
-    color: Colors.light.icon,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: Spacing.sm + 4,
-    marginBottom: Spacing.md,
-  },
-  snoozeButton: {
-    flex: 1,
-    backgroundColor: Colors.light.warningBackground,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-  },
-  snoozeButtonText: {
-    color: Colors.light.warningText,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  leaveButton: {
-    flex: 1,
-    backgroundColor: Colors.light.dangerBackground,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-  },
-  leaveButtonText: {
-    color: Colors.light.dangerText,
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  calledCard: {
-    backgroundColor: Colors.light.tint,
-  },
-  calledIcon: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginBottom: Spacing.lg,
-  },
-  calledIconText: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  calledTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#fff',
-    textAlign: 'center',
-    marginBottom: Spacing.sm,
-  },
-  calledSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.9)',
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
-  },
-  calledService: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: Spacing.sm + 4,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.md,
-    alignSelf: 'center',
-    marginBottom: Spacing.lg,
-  },
-  calledServiceText: {
-    color: '#fff',
-    fontSize: 15,
-  },
-  calledSnoozeButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.md,
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  calledSnoozeButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  calledNote: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    textAlign: 'center',
-  },
-  // waiting screen (new design)
-  waitingCard: {
-    backgroundColor: Colors.light.background,
-    borderRadius: BorderRadius.xl,
-    padding: Spacing.lg,
-    alignItems: 'center',
-  },
-  successIconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#22c55e',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
-  },
-  successIcon: {
-    fontSize: 40,
-    color: '#fff',
-    fontWeight: '700',
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: Colors.light.text,
-    marginBottom: 4,
-  },
-  successName: {
-    fontSize: 15,
-    color: Colors.light.icon,
-    marginBottom: Spacing.lg,
-  },
-  positionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: BorderRadius.lg,
-    padding: Spacing.lg,
-    width: '100%',
-    marginBottom: Spacing.md,
-  },
-  positionBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  positionNumber: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: Colors.light.tint,
-    lineHeight: 52,
-  },
-  positionLabel: {
-    fontSize: 13,
-    color: Colors.light.icon,
-    marginTop: 4,
-  },
-  dividerLine: {
-    width: 1,
-    height: 60,
-    backgroundColor: Colors.light.inputBorder,
-    marginHorizontal: Spacing.md,
-  },
-  waitBox: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  waitNumber: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: Colors.light.text,
-  },
-  waitLabel: {
-    fontSize: 13,
-    color: Colors.light.icon,
-    marginTop: 4,
-  },
-  footer: {
-    padding: Spacing.lg,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  footerText: {
-    fontSize: 14,
-    color: Colors.dark.icon,
-  },
-  footerBold: {
-    fontWeight: '700',
-  },
+  primaryBtnDisabled: { opacity: 0.6 },
+  primaryBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+
+  linkBtn: { alignItems: 'center', marginTop: 16 },
+  linkText: { color: '#2563eb', fontSize: 14, fontWeight: '600' },
+
+  themeRow: { width: '100%', maxWidth: 420, alignItems: 'flex-end', marginBottom: 8 },
+  themeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: '#2563eb22' },
+  themeBtnText: { fontSize: 13, fontWeight: '600', color: '#2563eb' },
+  passwordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  passwordInput: { flex: 1, marginBottom: 0 },
+  eyeBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'center', alignItems: 'center' },
+  eyeIcon: { fontSize: 16 },
 });
