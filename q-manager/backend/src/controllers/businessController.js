@@ -2,6 +2,15 @@ const businessService = require('../services/businessService');
 const queueService = require('../services/queueService');
 const { v4: uuidv4 } = require('uuid');
 
+async function getAllBusinesses(req, res, next) {
+  try {
+    const businesses = await businessService.getAllBusinessesWithQueues();
+    res.json({ businesses });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function getPublicBusiness(req, res, next) {
   try {
     const { businessId } = req.params;
@@ -145,6 +154,7 @@ async function addWalkin(req, res, next) {
 }
 
 module.exports = {
+  getAllBusinesses,
   getPublicBusiness,
   joinQueue,
   createBusiness,

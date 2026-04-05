@@ -72,6 +72,24 @@ async function getQueueForBusiness(businessId) {
   return res.rows;
 }
 
+async function getAllBusinessesWithQueues() {
+  const res = await query(
+    `SELECT b.id, b.name, b.type,
+            json_agg(DISTINCT jsonb_build_object('id', s.id, 'name', s.name, 'avgTime', s."avgTime")) as services,
+            json_agg(DISTINCT jsonb_build_object(
+              'id', t.id, 'position', t.position, 'status', t.status,
+              'customerName', t."customerName", 'phoneNumber', t."phoneNumber",
+              'serviceId', t."serviceId", 'createdAt', t."createdAt"
+            )) FILTER (WHERE t.id IS NOT NULL) as tickets
+     FROM "Business" b
+     LEFT JOIN "Service" s ON s."businessId" = b.id
+     LEFT JOIN "Ticket" t ON t."serviceId" = s.id
+     GROUP BY b.id
+     ORDER BY b."createdAt" ASC`,
+  );
+  return res.rows;
+}
+
 module.exports = {
   createBusiness,
   getBusinessByUser,
@@ -81,4 +99,5 @@ module.exports = {
   updateService,
   deleteService,
   getQueueForBusiness,
+  getAllBusinessesWithQueues,
 };

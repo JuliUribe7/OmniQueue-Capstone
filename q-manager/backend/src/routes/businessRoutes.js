@@ -4,6 +4,7 @@ const businessController = require('../controllers/businessController');
 const requireAuth = require('../middleware/requireAuth');
 
 // Public routes (no auth required)
+router.get('/api/admin/businesses', businessController.getAllBusinesses);
 router.get('/api/businesses/:businessId/public', businessController.getPublicBusiness);
 router.post('/api/businesses/:businessId/queue/join', businessController.joinQueue);
 
