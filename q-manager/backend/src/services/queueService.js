@@ -69,4 +69,28 @@ async function getEntryByToken(customerToken) {
   return res.rows[0] || null;
 }
 
-module.exports = { joinQueue, getEntryByToken };
+async function getQueueByService(serviceId) {
+  const res = await query(
+    'SELECT * FROM "Ticket" WHERE "serviceId" = $1 ORDER BY "position" ASC',
+    [serviceId],
+  );
+  return res.rows;
+}
+
+async function markTicketDone(ticketId) {
+  const res = await query(
+    `UPDATE "Ticket" SET "status" = 'Done', "updatedAt" = NOW() WHERE "id" = $1 RETURNING *`,
+    [ticketId],
+  );
+  return res.rows[0] || null;
+}
+
+async function removeTicket(ticketId) {
+  const res = await query(
+    'DELETE FROM "Ticket" WHERE "id" = $1 RETURNING *',
+    [ticketId],
+  );
+  return res.rows[0] || null;
+}
+
+module.exports = { joinQueue, getEntryByToken, getQueueByService, markTicketDone, removeTicket };
