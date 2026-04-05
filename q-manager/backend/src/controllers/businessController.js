@@ -2,6 +2,40 @@ const businessService = require('../services/businessService');
 const queueService = require('../services/queueService');
 const { v4: uuidv4 } = require('uuid');
 
+async function getPublicBusiness(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const res2 = await require('../db').query(
+      `SELECT b.id, b.name, b.type,
+              json_agg(json_build_object('id', s.id, 'name', s.name, 'avgTime', s."avgTime")) as services
+       FROM "Business" b
+       LEFT JOIN "Service" s ON s."businessId" = b.id
+       WHERE b.id = $1
+       GROUP BY b.id`,
+      [businessId],
+    );
+    const business = res2.rows[0];
+    if (!business) return res.status(404).json({ error: 'Business not found' });
+    res.json({ business });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function joinQueue(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const { customerName, phoneNumber, serviceId } = req.body;
+    if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
+    const { v4: uuidv4 } = require('uuid');
+    const token = uuidv4();
+    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName);
+    res.status(201).json({ ticket, token });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function createBusiness(req, res, next) {
   try {
     const { name, type } = req.body;
@@ -111,6 +145,8 @@ async function addWalkin(req, res, next) {
 }
 
 module.exports = {
+  getPublicBusiness,
+  joinQueue,
   createBusiness,
   getMyBusiness,
   updateMyBusiness,
