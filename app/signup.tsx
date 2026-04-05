@@ -6,7 +6,8 @@ import {
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { businessStore, BusinessType } from '../store/businessStore';
+import { DEFAULT_SERVICES, BusinessType } from '../store/businessStore';
+import { api } from '../services/api';
 
 function readTheme(): boolean {
   try { return (typeof localStorage !== 'undefined') && localStorage.getItem('omniqueue_theme') === 'dark'; }
@@ -74,28 +75,20 @@ export default function SignupPage() {
     setError('');
 
     try {
-      // Register in the backend so credentials are shared across all devices
-      const res = await fetch('/api/auth/sign-up/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ email: email.trim(), password, name: businessName.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data?.message ?? 'Could not create account. Email may already be in use.');
-        return;
-      }
+      // 1. Create auth account in backend
+      await api.signUp(email.trim(), password, businessName.trim());
 
-      // Also save locally so this device has the business type and services
-      const business = businessStore.signup(businessName.trim(), email.trim(), password, type);
-      if (business) {
-        router.replace(`/${business.id}/dashboard` as any);
-      } else {
-        setError('An account with that email already exists.');
-      }
-    } catch (e) {
-      setError('Could not connect to server. Please try again.');
+      // 2. Create business profile in backend
+      const { business } = await api.createBusiness(businessName.trim(), type);
+
+      // 3. Seed default services for this business type
+      const defaults = DEFAULT_SERVICES[type] ?? DEFAULT_SERVICES['other'];
+      await Promise.all(defaults.map(s => api.addService(s.name, s.avgTime)));
+
+      // 4. Route to dashboard using the backend business ID
+      router.replace(`/${business.id}/dashboard` as any);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not create account. Email may already be in use.');
     } finally {
       setLoading(false);
     }

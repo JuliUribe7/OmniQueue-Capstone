@@ -9,33 +9,48 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { businessStore } from '../../store/businessStore';
-import { getQueueStore } from '../../store/queueStore';
+import { api } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
+
+type PublicService = { id: string; name: string; avgTime: number };
+type PublicBusiness = { id: string; name: string; type: string; services: PublicService[] };
 
 export default function CustomerPortal() {
   const router = useRouter();
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
 
-  const business = businessStore.getById(businessId);
+  const [business, setBusiness] = useState<PublicBusiness | null>(null);
+  const [loadError, setLoadError]   = useState('');
+  const [loading, setLoading]       = useState(true);
 
   const [name, setName]           = useState('');
   const [phone, setPhone]         = useState('');
-  const [serviceId, setServiceId] = useState(business?.services[0]?.id ?? '');
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState('');
+  const [serviceId, setServiceId] = useState('');
+  const [joining, setJoining]     = useState(false);
+  const [joinError, setJoinError] = useState('');
 
-  // Keep services in sync if business updates
-  const [services, setServices] = useState(business?.services ?? []);
   useEffect(() => {
-    const unsub = businessStore.subscribe(() => {
-      const b = businessStore.getById(businessId);
-      if (b) setServices(b.services);
-    });
-    return unsub;
+    api.getPublicBusiness(businessId)
+      .then(({ business: biz }) => {
+        setBusiness(biz);
+        if (biz.services?.length > 0) setServiceId(biz.services[0].id);
+      })
+      .catch(() => setLoadError('Business not found or no longer available.'))
+      .finally(() => setLoading(false));
   }, [businessId]);
 
-  if (!business) {
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError || !business) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar style="dark" />
@@ -43,52 +58,29 @@ export default function CustomerPortal() {
           <Text style={styles.errorIcon}>🔍</Text>
           <Text style={styles.errorTitle}>Business not found</Text>
           <Text style={styles.errorSub}>
-            This link may be invalid or the business no longer exists.
+            {loadError || 'This link may be invalid or the business no longer exists.'}
           </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  const store = getQueueStore(businessId);
-  const [queueLen, setQueueLen] = useState(store.getTickets().length);
-  useEffect(() => {
-    const unsub = store.subscribe(() => setQueueLen(store.getTickets().length));
-    return unsub;
-  }, [businessId]);
-
+  const services = business.services ?? [];
   const selectedService = services.find(s => s.id === serviceId) ?? services[0];
-  const lastTicket = store.getTickets().at(-1);
-  const estWait = selectedService
-    ? (lastTicket?.estimatedWait ?? 0) + selectedService.avgTime
-    : 0;
-
   const canJoin = name.trim().length >= 2 && phone.replace(/\D/g, '').length >= 10 && !!selectedService;
 
-  function handleJoin() {
+  async function handleJoin() {
     if (!canJoin || !selectedService) return;
-    setError('');
-    setLoading(true);
-
-    const tickets = store.getTickets();
-    const lastWait = tickets.length > 0 ? (tickets[tickets.length - 1]?.estimatedWait ?? 0) : 0;
-
-    const ticket = {
-      id: `cust_${Date.now()}`,
-      position: tickets.length + 1,
-      customerName: name.trim(),
-      phoneNumber: phone.trim(),
-      serviceName: selectedService.name,
-      serviceId: selectedService.id,
-      serviceAvgTime: selectedService.avgTime,
-      status: 'Waiting' as const,
-      joinedAt: new Date().toISOString(),
-      estimatedWait: lastWait + selectedService.avgTime,
-    };
-
-    store.addTicket(ticket);
-    setLoading(false);
-    router.push(`/${businessId}/waiting?ticketId=${ticket.id}`);
+    setJoinError('');
+    setJoining(true);
+    try {
+      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id);
+      router.push(`/${businessId}/waiting?token=${token}`);
+    } catch (e: any) {
+      setJoinError(e?.message ?? 'Could not join queue. Please try again.');
+    } finally {
+      setJoining(false);
+    }
   }
 
   const typeLabel: Record<string, string> = {
@@ -102,24 +94,19 @@ export default function CustomerPortal() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* Header */}
           <View style={styles.header}>
             <Text style={styles.businessName}>{business.name}</Text>
             <Text style={styles.businessType}>{typeLabel[business.type] ?? '🏢 Business'}</Text>
             <View style={styles.queueBadge}>
               <View style={styles.queueDot} />
-              <Text style={styles.queueBadgeText}>
-                {queueLen === 0 ? 'No wait right now' : `${queueLen} people in queue`}
-              </Text>
+              <Text style={styles.queueBadgeText}>Queue is open</Text>
             </View>
           </View>
 
-          {/* Form card */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Join the Queue</Text>
             <Text style={styles.cardSub}>Enter your info and we'll hold your spot.</Text>
 
-            {/* Name */}
             <Text style={styles.fieldLabel}>Your Name</Text>
             <TextInput
               style={styles.input}
@@ -131,7 +118,6 @@ export default function CustomerPortal() {
               returnKeyType="next"
             />
 
-            {/* Phone */}
             <Text style={styles.fieldLabel}>Phone Number</Text>
             <TextInput
               style={styles.input}
@@ -144,7 +130,6 @@ export default function CustomerPortal() {
             />
             <Text style={styles.fieldHint}>We'll notify you when it's your turn.</Text>
 
-            {/* Services */}
             <Text style={styles.fieldLabel}>Choose a Service</Text>
             <View style={styles.chipWrap}>
               {services.map(s => (
@@ -164,30 +149,24 @@ export default function CustomerPortal() {
               ))}
             </View>
 
-            {/* Wait preview */}
             {selectedService && (
               <View style={styles.previewRow}>
                 <View style={styles.previewItem}>
-                  <Text style={styles.previewVal}>#{queueLen + 1}</Text>
-                  <Text style={styles.previewLbl}>Position</Text>
-                </View>
-                <View style={styles.previewDivider} />
-                <View style={styles.previewItem}>
-                  <Text style={styles.previewVal}>~{estWait}m</Text>
+                  <Text style={styles.previewVal}>~{selectedService.avgTime}m</Text>
                   <Text style={styles.previewLbl}>Est. Wait</Text>
                 </View>
               </View>
             )}
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {!!joinError && <Text style={styles.errorText}>{joinError}</Text>}
 
             <TouchableOpacity
               style={[styles.joinBtn, !canJoin && styles.joinBtnDisabled]}
               onPress={handleJoin}
-              disabled={!canJoin || loading}
+              disabled={!canJoin || joining}
               activeOpacity={0.85}
             >
-              {loading
+              {joining
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={styles.joinBtnText}>Join Queue</Text>}
             </TouchableOpacity>
@@ -205,7 +184,6 @@ const styles = StyleSheet.create({
   scroll: { padding: Spacing.lg, gap: Spacing.md, paddingBottom: 40 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.lg, gap: Spacing.md },
 
-  // Header
   header: { alignItems: 'center', paddingVertical: Spacing.lg, gap: 6 },
   businessName: { fontSize: 28, fontWeight: '800', color: '#111827', textAlign: 'center', letterSpacing: -0.5 },
   businessType: { fontSize: 15, color: '#6b7280' },
@@ -213,12 +191,10 @@ const styles = StyleSheet.create({
   queueDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' },
   queueBadgeText: { fontSize: 13, fontWeight: '600', color: '#374151' },
 
-  // Card
   card: { backgroundColor: '#fff', borderRadius: BorderRadius.xl, padding: Spacing.lg, gap: Spacing.sm, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 12, elevation: 3 },
   cardTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
   cardSub: { fontSize: 14, color: '#6b7280', marginBottom: 4 },
 
-  // Form
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#374151', marginTop: 4 },
   fieldHint: { fontSize: 12, color: '#9ca3af', marginTop: -4 },
   input: {
@@ -226,7 +202,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md, padding: 14, fontSize: 16, color: '#111827',
   },
 
-  // Service chips
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: BorderRadius.md,
@@ -239,19 +214,15 @@ const styles = StyleSheet.create({
   chipTime: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
   chipTimeSelected: { color: '#3b82f6' },
 
-  // Preview row
   previewRow: { flexDirection: 'row', backgroundColor: '#f0f4f8', borderRadius: BorderRadius.lg, padding: Spacing.md, marginTop: 4 },
   previewItem: { flex: 1, alignItems: 'center' },
   previewVal: { fontSize: 26, fontWeight: '800', color: '#111827' },
   previewLbl: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  previewDivider: { width: 1, backgroundColor: '#e5e7eb', marginHorizontal: Spacing.md },
 
-  // Join button
   joinBtn: { backgroundColor: '#2563eb', borderRadius: BorderRadius.lg, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   joinBtnDisabled: { opacity: 0.4 },
   joinBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
 
-  // Error
   errorText: { color: '#ef4444', fontSize: 13, textAlign: 'center' },
   errorIcon: { fontSize: 48 },
   errorTitle: { fontSize: 20, fontWeight: '700', color: '#111827' },
