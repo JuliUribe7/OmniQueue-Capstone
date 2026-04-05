@@ -88,6 +88,10 @@ export const api = {
   removeTicket: (ticketId: string) =>
     apiFetch(`/api/tickets/${ticketId}`, { method: 'DELETE' }),
 
+  // Admin
+  getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
+    apiFetch('/api/admin/businesses'),
+
   // Public (customer-facing, no auth)
   getPublicBusiness: (businessId: string): Promise<{ business: { id: string; name: string; type: string; services: { id: string; name: string; avgTime: number }[] } }> =>
     apiFetch(`/api/businesses/${businessId}/public`),
