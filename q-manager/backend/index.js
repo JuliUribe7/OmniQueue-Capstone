@@ -21,7 +21,8 @@ const queueRoutes = require('./src/routes/queueRoutes');
 app.use(queueRoutes);
 const telnyxRoutes = require('./src/routes/telnyxRoutes');
 app.use(telnyxRoutes);
-
+const paymentRoutes = require('./src/routes/paymentRoutes');
+app.use('/api/payments', paymentRoutes);
 const errorHandler = require('./src/middleware/errorHandler');
 app.use(errorHandler);
 
