@@ -36,6 +36,17 @@ async function getQueue(req, res, next) {
   }
 }
 
+async function callTicket(req, res, next) {
+  try {
+    const { ticketId } = req.params;
+    const ticket = await queueService.callTicket(ticketId);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function markDone(req, res, next) {
   try {
     const { ticketId } = req.params;
@@ -58,4 +69,4 @@ async function removeTicket(req, res, next) {
   }
 }
 
-module.exports = { join, getStatus, getQueue, markDone, removeTicket };
+module.exports = { join, getStatus, getQueue, callTicket, markDone, removeTicket };
