@@ -86,6 +86,7 @@ async function markTicketDone(ticketId) {
 }
 
 async function removeTicket(ticketId) {
+  await query('DELETE FROM "Event" WHERE "ticketId" = $1', [ticketId]);
   const res = await query(
     'DELETE FROM "Ticket" WHERE "id" = $1 RETURNING *',
     [ticketId],
