@@ -8,7 +8,7 @@ import {
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { businessStore } from '../store/businessStore';
+import { api } from '../services/api';
 
 const LIGHT = {
   bg: '#f5f7fa', surface: '#ffffff', border: '#e2e8f0',
@@ -54,36 +54,38 @@ export default function LandingPage() {
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn]   = useState(false);
 
-  const [existingSession, setExistingSession] = useState<{ type: string; name: string; id?: string } | null>(null);
+  const [existingSession, setExistingSession] = useState<{ name: string; id: string } | null>(null);
 
-  // Check for existing session — show a resume banner
+  // Check for existing backend session — show a resume banner
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const session = businessStore.getSession();
-      if (session?.type === 'business') {
-        const biz = businessStore.getById(session.id);
-        if (biz) setExistingSession({ type: 'business', name: biz.name, id: session.id });
-      }
-    }, 0);
-    return () => clearTimeout(timer);
+    api.getMyBusiness()
+      .then(({ business }) => setExistingSession({ name: business.name, id: business.id }))
+      .catch(() => setExistingSession(null));
   }, []);
 
-  function handleBusinessLogin() {
+  async function handleBusinessLogin() {
     if (!email.trim() || !password.trim()) {
       setLoginError('Please enter your email and password.');
       return;
     }
     setLoggingIn(true);
     setLoginError('');
-    setTimeout(() => {
-      const business = businessStore.login(email.trim(), password);
-      setLoggingIn(false);
-      if (business) {
-        router.replace(`/${business.id}/dashboard` as any);
+    try {
+      // Sign in via backend
+      await api.signIn(email.trim(), password);
+
+      // Get the business profile tied to this account
+      const { business } = await api.getMyBusiness();
+      router.replace(`/${business.id}/dashboard` as any);
+    } catch (e: any) {
+      if (e?.status === 404) {
+        setLoginError('No business found for this account. Please sign up first.');
       } else {
-        setLoginError('Invalid email or password.');
+        setLoginError(e?.message ?? 'Invalid email or password.');
       }
-    }, 300);
+    } finally {
+      setLoggingIn(false);
+    }
   }
 
   return (
@@ -109,14 +111,14 @@ export default function LandingPage() {
             <View style={styles.sessionBtns}>
               <TouchableOpacity
                 style={styles.sessionContinueBtn}
-                onPress={() => {
-                  const session = businessStore.getSession();
-                  if (session?.type === 'business') router.replace(`/${session.id}/dashboard` as any);
-                }}
+                onPress={() => router.replace(`/${existingSession.id}/dashboard` as any)}
               >
                 <Text style={styles.sessionContinueText}>Continue →</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => { businessStore.logout(); setExistingSession(null); }}>
+              <TouchableOpacity onPress={() => {
+                fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' });
+                setExistingSession(null);
+              }}>
                 <Text style={[styles.sessionLogoutText, { color: C.sessionText }]}>Log out</Text>
               </TouchableOpacity>
             </View>

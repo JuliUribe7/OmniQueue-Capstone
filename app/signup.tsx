@@ -6,7 +6,8 @@ import {
   ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { businessStore, BusinessType } from '../store/businessStore';
+import { DEFAULT_SERVICES, BusinessType } from '../store/businessStore';
+import { api } from '../services/api';
 
 function readTheme(): boolean {
   try { return (typeof localStorage !== 'undefined') && localStorage.getItem('omniqueue_theme') === 'dark'; }
@@ -63,7 +64,7 @@ export default function SignupPage() {
   const [showPass, setShowPass]         = useState(false);
   const [showConfirm, setShowConfirm]   = useState(false);
 
-  function handleSignup() {
+  async function handleSignup() {
     if (!businessName.trim()) { setError('Please enter your business name.'); return; }
     if (!email.trim())        { setError('Please enter your email.'); return; }
     if (!password.trim())     { setError('Please enter a password.'); return; }
@@ -73,15 +74,24 @@ export default function SignupPage() {
     setLoading(true);
     setError('');
 
-    setTimeout(() => {
-      const business = businessStore.signup(businessName.trim(), email.trim(), password, type);
+    try {
+      // 1. Create auth account in backend
+      await api.signUp(email.trim(), password, businessName.trim());
+
+      // 2. Create business profile in backend
+      const { business } = await api.createBusiness(businessName.trim(), type);
+
+      // 3. Seed default services for this business type
+      const defaults = DEFAULT_SERVICES[type] ?? DEFAULT_SERVICES['other'];
+      await Promise.all(defaults.map(s => api.addService(s.name, s.avgTime)));
+
+      // 4. Route to dashboard using the backend business ID
+      router.replace(`/${business.id}/dashboard` as any);
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not create account. Email may already be in use.');
+    } finally {
       setLoading(false);
-      if (business) {
-        router.replace(`/${business.id}/dashboard` as any);
-      } else {
-        setError('An account with that email already exists.');
-      }
-    }, 300);
+    }
   }
 
   return (
@@ -115,6 +125,8 @@ export default function SignupPage() {
             placeholderTextColor={C.placeholder}
             value={businessName}
             onChangeText={t => { setBusinessName(t); setError(''); }}
+            id="business-name"
+            autoComplete="organization"
           />
 
           <Text style={[styles.label, { color: C.textSub }]}>Business Type</Text>
@@ -143,6 +155,8 @@ export default function SignupPage() {
             onChangeText={t => { setEmail(t); setError(''); }}
             autoCapitalize="none"
             keyboardType="email-address"
+            id="email"
+            autoComplete="email"
           />
 
           <Text style={[styles.label, { color: C.textSub }]}>Password</Text>
@@ -154,6 +168,8 @@ export default function SignupPage() {
               value={password}
               onChangeText={t => { setPassword(t); setError(''); }}
               secureTextEntry={!showPass}
+              id="password"
+              autoComplete="new-password"
             />
             <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowPass(v => !v)}>
               <Text style={styles.eyeIcon}>{showPass ? '🙈' : '👁️'}</Text>
@@ -169,6 +185,8 @@ export default function SignupPage() {
               value={confirmPass}
               onChangeText={t => { setConfirmPass(t); setError(''); }}
               secureTextEntry={!showConfirm}
+              id="confirm-password"
+              autoComplete="new-password"
             />
             <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowConfirm(v => !v)}>
               <Text style={styles.eyeIcon}>{showConfirm ? '🙈' : '👁️'}</Text>

@@ -19,6 +19,8 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 const queueRoutes = require('./src/routes/queueRoutes');
 app.use(queueRoutes);
+const businessRoutes = require('./src/routes/businessRoutes');
+app.use(businessRoutes);
 const telnyxRoutes = require('./src/routes/telnyxRoutes');
 app.use(telnyxRoutes);
 const paymentRoutes = require('./src/routes/paymentRoutes');

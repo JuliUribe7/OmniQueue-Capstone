@@ -1,6 +1,5 @@
-// Customer waiting screen — /{businessId}/waiting?ticketId=xxx
-// Shows real-time position + estimated wait after joining the queue.
-// Subscribes to the queue store so it updates live when staff takes action.
+// Customer waiting screen — /{businessId}/waiting?token=xxx
+// Polls the backend every 5 seconds to show live position + status.
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -9,29 +8,61 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { businessStore } from '../../store/businessStore';
-import { getQueueStore, ActiveTicket } from '../../store/queueStore';
+import { api, ApiTicket } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
 
 export default function CustomerWaiting() {
   const router = useRouter();
-  const { businessId, ticketId } = useLocalSearchParams<{ businessId: string; ticketId: string }>();
+  const { businessId, token } = useLocalSearchParams<{ businessId: string; token: string }>();
 
-  const business = businessStore.getById(businessId);
-  const store = getQueueStore(businessId);
-
-  const [ticket, setTicket] = useState<ActiveTicket | null>(store.getTicketById(ticketId));
+  const [ticket, setTicket]   = useState<ApiTicket | null>(null);
+  const [loading, setLoading] = useState(true);
   const [leaving, setLeaving] = useState(false);
 
-  useEffect(() => {
-    const unsub = store.subscribe(() => {
-      setTicket(store.getTicketById(ticketId));
-    });
-    return unsub;
-  }, [businessId, ticketId]);
+  async function fetchStatus() {
+    try {
+      const { ticket: t } = await api.getTicketByToken(token);
+      setTicket(t);
+    } catch {
+      setTicket(null);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  // No ticket found (left queue or invalid link)
-  if (!ticket) {
+  // Initial load
+  useEffect(() => {
+    fetchStatus();
+  }, [token]);
+
+  // Poll every 5 seconds
+  useEffect(() => {
+    const id = setInterval(fetchStatus, 5000);
+    return () => clearInterval(id);
+  }, [token]);
+
+  async function handleLeave() {
+    if (!ticket) return;
+    setLeaving(true);
+    try {
+      await api.removeTicket(ticket.id);
+    } catch {}
+    router.replace(`/${businessId}`);
+  }
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Ticket not found — already removed or invalid
+  if (!ticket || ticket.status === 'Done') {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar style="dark" />
@@ -74,27 +105,19 @@ export default function CustomerWaiting() {
     );
   }
 
-  function handleLeave() {
-    setLeaving(true);
-    store.removeTicket(ticketId);
-    router.replace(`/${businessId}`);
-  }
-
   const position = ticket.position;
-  const wait = ticket.estimatedWait;
+  const wait = ticket.avgTime * position;
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Business header */}
       <View style={styles.header}>
-        <Text style={styles.businessName}>{business?.name ?? 'Queue'}</Text>
-        <Text style={styles.headerSub}>Smart Queue System</Text>
+        <Text style={styles.businessName}>{ticket.serviceName}</Text>
+        <Text style={styles.headerSub}>OmniQueue</Text>
       </View>
 
       <View style={styles.content}>
-        {/* Success check */}
         <View style={styles.checkCircle}>
           <Text style={styles.checkIcon}>✓</Text>
         </View>
@@ -103,7 +126,6 @@ export default function CustomerWaiting() {
           {ticket.customerName.split(' ')[0]} · {ticket.serviceName}
         </Text>
 
-        {/* Position + wait row */}
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
             <Text style={styles.statNum}>#{position}</Text>
@@ -122,7 +144,6 @@ export default function CustomerWaiting() {
           We'll notify {ticket.phoneNumber} when you're up.
         </Text>
 
-        {/* Leave button */}
         <TouchableOpacity
           style={styles.leaveBtn}
           onPress={handleLeave}
@@ -144,7 +165,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f4f8' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.lg, gap: Spacing.md },
 
-  // Header
   header: {
     padding: Spacing.lg, paddingBottom: Spacing.md,
     borderBottomWidth: 1, borderBottomColor: '#e5e7eb', backgroundColor: '#fff',
@@ -152,7 +172,6 @@ const styles = StyleSheet.create({
   businessName: { fontSize: 22, fontWeight: '800', color: '#111827', letterSpacing: -0.5 },
   headerSub: { fontSize: 13, color: '#9ca3af', marginTop: 2 },
 
-  // Main content
   content: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: Spacing.lg, gap: Spacing.md },
 
   checkCircle: {
@@ -164,7 +183,6 @@ const styles = StyleSheet.create({
   inQueueTitle: { fontSize: 26, fontWeight: '800', color: '#111827', textAlign: 'center' },
   inQueueName: { fontSize: 15, color: '#6b7280', textAlign: 'center', marginBottom: 8 },
 
-  // Stats
   statsRow: {
     flexDirection: 'row', backgroundColor: '#fff', borderRadius: BorderRadius.xl,
     padding: Spacing.lg, width: '100%',
@@ -177,7 +195,6 @@ const styles = StyleSheet.create({
 
   smsNote: { fontSize: 13, color: '#6b7280', textAlign: 'center' },
 
-  // Leave button
   leaveBtn: {
     borderWidth: 1.5, borderColor: '#fca5a5', borderRadius: BorderRadius.lg,
     paddingVertical: 13, paddingHorizontal: 32, backgroundColor: '#fef2f2',
@@ -185,7 +202,6 @@ const styles = StyleSheet.create({
   },
   leaveBtnText: { color: '#dc2626', fontWeight: '700', fontSize: 15 },
 
-  // Called state
   calledBadge: {
     width: 90, height: 90, borderRadius: 45,
     backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
@@ -204,7 +220,6 @@ const styles = StyleSheet.create({
   },
   calledDoneBtnText: { color: '#1d4ed8', fontWeight: '700', fontSize: 16 },
 
-  // No ticket
   bigIcon: { fontSize: 52 },
   noTicketTitle: { fontSize: 22, fontWeight: '700', color: '#111827', textAlign: 'center' },
   noTicketSub: { fontSize: 14, color: '#6b7280', textAlign: 'center' },

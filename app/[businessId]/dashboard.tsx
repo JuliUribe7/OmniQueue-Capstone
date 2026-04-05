@@ -9,9 +9,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { businessStore, Service } from '../../store/businessStore';
-import { getQueueStore, ActiveTicket } from '../../store/queueStore';
 import { BorderRadius, Spacing } from '../../constants/theme';
+import { api, ApiBusiness, ApiService, ApiTicket } from '../../services/api';
 
 type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'customers' | 'settings';
 
@@ -55,30 +54,11 @@ export default function BusinessDashboard() {
   const router = useRouter();
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
 
-  const business = businessStore.getById(businessId);
-
-  // Redirect if not logged in as this business
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      const session = businessStore.getSession();
-      if (!session || session.type !== 'business' || session.id !== businessId) {
-        router.replace('/');
-      }
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (!business) {
-    return (
-      <View style={styles.centered}>
-        <Text style={{ color: '#fff' }}>Business not found.</Text>
-      </View>
-    );
-  }
-
-  const store = getQueueStore(businessId);
-
-  const [tickets, setTickets] = useState<ActiveTicket[]>(store.getTickets());
+  // ── API state ──────────────────────────────────────────────────────────────
+  const [business, setBusiness]   = useState<ApiBusiness | null>(null);
+  const [tickets, setTickets]     = useState<ApiTicket[]>([]);
+  const [services, setServices]   = useState<ApiService[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('home');
 
   // Theme
@@ -98,40 +78,81 @@ export default function BusinessDashboard() {
   const C = isDark ? DARK : LIGHT;
 
   // Services management
-  const [services, setServices] = useState<Service[]>(business.services);
   const [newServiceName, setNewServiceName] = useState('');
   const [newServiceTime, setNewServiceTime] = useState('');
-  const [servicesSaved, setServicesSaved] = useState(false);
+  const [servicesSaved, setServicesSaved]   = useState(false);
+  const [savingServices, setSavingServices] = useState(false);
 
   // Walk-in form
   const [walkInName, setWalkInName]           = useState('');
   const [walkInPhone, setWalkInPhone]         = useState('');
-  const [walkInServiceId, setWalkInServiceId] = useState(services[0]?.id ?? '');
+  const [walkInServiceId, setWalkInServiceId] = useState('');
   const [walkInSuccess, setWalkInSuccess]     = useState(false);
   const [walkInLoading, setWalkInLoading]     = useState(false);
+  const [walkInError, setWalkInError]         = useState('');
 
   // Confirm modal
   const [confirmModal, setConfirmModal] = useState<{
-    visible: boolean; action: 'done' | 'remove' | null; ticket: ActiveTicket | null;
+    visible: boolean; action: 'done' | 'remove' | 'call' | null; ticket: ApiTicket | null;
   }>({ visible: false, action: null, ticket: null });
 
-  // Edit wait modal
-  const [editModal, setEditModal] = useState<{
-    visible: boolean; ticket: ActiveTicket | null; value: string;
-  }>({ visible: false, ticket: null, value: '' });
-
   // QR share state
-  const [qrOpen, setQrOpen]         = useState(false);
-  const [qrSmsPhone, setQrSmsPhone] = useState('');
-  const [qrSmsSent, setQrSmsSent]   = useState(false);
+  const [qrOpen, setQrOpen]             = useState(false);
+  const [qrSmsPhone, setQrSmsPhone]     = useState('');
+  const [qrSmsSent, setQrSmsSent]       = useState(false);
   const [qrLinkCopied, setQrLinkCopied] = useState(false);
 
-  // Portal URL + QR helpers (used in sidebar button and popup)
+  // Portal URL + QR helpers
   const portalUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/${businessId}`
     : `/${businessId}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=ffffff&data=${encodeURIComponent(portalUrl)}`;
 
+  // Settings tab state
+  const [settingsHours, setSettingsHours] = useState({
+    mon: '9:00 AM – 6:00 PM', tue: '9:00 AM – 6:00 PM', wed: '9:00 AM – 6:00 PM',
+    thu: '9:00 AM – 6:00 PM', fri: '9:00 AM – 6:00 PM',
+    sat: '10:00 AM – 4:00 PM', sun: 'Closed',
+  });
+  const [hoursSaved, setHoursSaved] = useState(false);
+
+  // ── Load data on mount ──────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    async function init() {
+      try {
+        const [{ business: biz }, { services: svcs }, { tickets: tix }] = await Promise.all([
+          api.getMyBusiness(),
+          api.getServices(),
+          api.getQueue(),
+        ]);
+        if (cancelled) return;
+        setBusiness(biz);
+        setServices(svcs);
+        setTickets(tix);
+        if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
+      } catch {
+        if (!cancelled) router.replace('/');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    init();
+    return () => { cancelled = true; };
+  }, [businessId]);
+
+  // ── Poll queue every 5 seconds ─────────────────────────────────────────────
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const { tickets: tix } = await api.getQueue();
+        setTickets(tix);
+      } catch {}
+    }, 5000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
   function shareViaSMS() {
     const body = encodeURIComponent(`Join the queue here: ${portalUrl}`);
     const cleaned = qrSmsPhone.replace(/\D/g, '');
@@ -146,83 +167,75 @@ export default function BusinessDashboard() {
     setTimeout(() => setQrLinkCopied(false), 2000);
   }
 
-  // Settings tab state
-  const [settingsHours, setSettingsHours] = useState({
-    mon: '9:00 AM – 6:00 PM', tue: '9:00 AM – 6:00 PM', wed: '9:00 AM – 6:00 PM',
-    thu: '9:00 AM – 6:00 PM', fri: '9:00 AM – 6:00 PM',
-    sat: '10:00 AM – 4:00 PM', sun: 'Closed',
-  });
-  const [hoursSaved, setHoursSaved] = useState(false);
-
-  useEffect(() => {
-    const unsub = store.subscribe(() => setTickets(store.getTickets()));
-    return unsub;
-  }, [businessId]);
-
-  useEffect(() => {
-    const unsub = businessStore.subscribe(() => {
-      const updated = businessStore.getById(businessId);
-      if (updated) setServices(updated.services);
-    });
-    return unsub;
-  }, [businessId]);
-
-  function handleLogout() {
-    businessStore.logout();
+  async function handleLogout() {
+    try { await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' }); } catch {}
     router.replace('/');
   }
 
   // ── Walk-in ────────────────────────────────────────────────────────────────
-  function handleAddWalkIn() {
+  async function handleAddWalkIn() {
     if (!walkInName.trim() || walkInPhone.trim().length < 10) return;
     setWalkInLoading(true);
-    const service = services.find(s => s.id === walkInServiceId) ?? services[0];
-    const lastWait = tickets.length > 0 ? (tickets[tickets.length - 1]?.estimatedWait ?? 0) : 0;
-    const ticket: ActiveTicket = {
-      id: `walkin_${Date.now()}`,
-      position: tickets.length + 1,
-      customerName: walkInName.trim(),
-      phoneNumber: walkInPhone.trim(),
-      serviceName: service.name,
-      serviceId: service.id,
-      serviceAvgTime: service.avgTime,
-      status: 'Waiting',
-      joinedAt: new Date().toISOString(),
-      estimatedWait: lastWait + service.avgTime,
-    };
-    store.addTicket(ticket);
-    setWalkInLoading(false);
-    setWalkInSuccess(true);
-    setWalkInName(''); setWalkInPhone('');
-    setWalkInServiceId(services[0]?.id ?? '');
-    setTimeout(() => setWalkInSuccess(false), 3000);
+    setWalkInError('');
+    try {
+      const serviceId = walkInServiceId || services[0]?.id;
+      await api.addWalkin(walkInName.trim(), walkInPhone.trim(), serviceId);
+      const { tickets: tix } = await api.getQueue();
+      setTickets(tix);
+      setWalkInSuccess(true);
+      setWalkInName(''); setWalkInPhone('');
+      if (services.length > 0) setWalkInServiceId(services[0].id);
+      setTimeout(() => setWalkInSuccess(false), 3000);
+    } catch (e: any) {
+      setWalkInError(e?.message ?? 'Failed to add customer');
+    } finally {
+      setWalkInLoading(false);
+    }
   }
 
   async function handleConfirm() {
     const { action, ticket } = confirmModal;
     setConfirmModal({ visible: false, action: null, ticket: null });
     if (!ticket) return;
-    if (action === 'done')   store.markDone(ticket.id);
-    if (action === 'remove') store.removeTicket(ticket.id);
+    try {
+      if (action === 'done')   await api.markDone(ticket.id);
+      if (action === 'remove') await api.removeTicket(ticket.id);
+      if (action === 'call')   await api.callTicket(ticket.id);
+      const { tickets: tix } = await api.getQueue();
+      setTickets(tix);
+    } catch {}
   }
 
-  function saveServices() {
-    businessStore.updateServices(businessId, services);
-    setServicesSaved(true);
-    setTimeout(() => setServicesSaved(false), 2500);
+  async function saveServices() {
+    setSavingServices(true);
+    try {
+      await Promise.all(services.map(s => api.updateService(s.id, s.name, s.avgTime)));
+      setServicesSaved(true);
+      setTimeout(() => setServicesSaved(false), 2500);
+    } catch {}
+    setSavingServices(false);
   }
 
-  function addService() {
+  async function addService() {
     if (!newServiceName.trim() || !newServiceTime.trim()) return;
     const time = parseInt(newServiceTime, 10);
     if (isNaN(time) || time <= 0) return;
-    setServices(prev => [...prev, { id: `s${Date.now()}`, name: newServiceName.trim(), avgTime: time }]);
-    setNewServiceName(''); setNewServiceTime('');
+    try {
+      await api.addService(newServiceName.trim(), time);
+      const { services: svcs } = await api.getServices();
+      setServices(svcs);
+      setNewServiceName(''); setNewServiceTime('');
+    } catch {}
   }
 
-  function removeService(id: string) { setServices(prev => prev.filter(s => s.id !== id)); }
+  async function removeService(id: string) {
+    try {
+      await api.deleteService(id);
+      setServices(prev => prev.filter(s => s.id !== id));
+    } catch {}
+  }
 
-  function updateService(id: string, field: 'name' | 'avgTime', value: string) {
+  function updateServiceLocal(id: string, field: 'name' | 'avgTime', value: string) {
     setServices(prev => prev.map(s =>
       s.id === id ? { ...s, [field]: field === 'avgTime' ? parseInt(value, 10) || s.avgTime : value } : s
     ));
@@ -231,13 +244,22 @@ export default function BusinessDashboard() {
   // ── Stats ──────────────────────────────────────────────────────────────────
   const waitingTickets = tickets.filter(t => t.status === 'Waiting');
   const calledTickets  = tickets.filter(t => t.status === 'Called');
-  const avgWait = tickets.length > 0
-    ? Math.round(tickets.reduce((s, t) => s + t.estimatedWait, 0) / tickets.length) : 0;
+  const avgWait = waitingTickets.length > 0
+    ? Math.round(waitingTickets.reduce((s, t) => s + t.avgTime, 0) / waitingTickets.length) : 0;
 
-  function statusColor(status: ActiveTicket['status']) {
+  function statusColor(status: ApiTicket['status']) {
     if (status === 'Called')  return '#10b981';
     if (status === 'Waiting') return '#f59e0b';
     return '#6b7280';
+  }
+
+  // Loading screen
+  if (loading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: isDark ? '#151718' : '#f5f7fa' }]}>
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
   }
 
   // Visit badge — counts same phone in current queue
@@ -256,7 +278,7 @@ export default function BusinessDashboard() {
   }
 
   // ── Ticket card ────────────────────────────────────────────────────────────
-  function TicketCard({ item, compact = false }: { item: ActiveTicket; compact?: boolean }) {
+  function TicketCard({ item, compact = false }: { item: ApiTicket; compact?: boolean }) {
     const isCalled = item.status === 'Called';
     return (
       <View style={[styles.ticketCard, isCalled && styles.ticketCardCalled, compact && styles.ticketCardCompact,
@@ -282,23 +304,22 @@ export default function BusinessDashboard() {
         <View style={styles.ticketMeta}>
           <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
           <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-          <Text style={[styles.metaText, { color: C.textSub }]}>🕐 {timeAgo(item.joinedAt)}</Text>
+          <Text style={[styles.metaText, { color: C.textSub }]}>🕐 {timeAgo(item.createdAt)}</Text>
           {!compact && (
             <>
               <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-              <TouchableOpacity
-                onPress={() => setEditModal({ visible: true, ticket: item, value: String(item.estimatedWait) })}
-                style={styles.editWaitRow}
-              >
-                <Text style={[styles.metaText, { color: C.textSub }]}>⏱ ~{item.estimatedWait} min</Text>
-                <Text style={styles.editLabel}> Edit</Text>
-              </TouchableOpacity>
+              <Text style={[styles.metaText, { color: C.textSub }]}>⏱ ~{item.avgTime} min</Text>
             </>
           )}
         </View>
 
         {!compact && (
           <View style={styles.ticketActions}>
+            {!isCalled && (
+              <TouchableOpacity style={styles.callBtn} onPress={() => setConfirmModal({ visible: true, action: 'call', ticket: item })}>
+                <Text style={styles.callBtnText}>📣 Call</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.doneBtn} onPress={() => setConfirmModal({ visible: true, action: 'done', ticket: item })}>
               <Text style={styles.doneBtnText}>✓ Done</Text>
             </TouchableOpacity>
@@ -393,8 +414,7 @@ export default function BusinessDashboard() {
   // ── Walk-in tab ────────────────────────────────────────────────────────────
   function renderWalkIn() {
     const selectedService = services.find(s => s.id === walkInServiceId) ?? services[0];
-    const lastWait = tickets.length > 0 ? (tickets[tickets.length - 1]?.estimatedWait ?? 0) : 0;
-    const estWait = selectedService ? lastWait + selectedService.avgTime : 0;
+    const estWait = selectedService ? (waitingTickets.length + 1) * selectedService.avgTime : 0;
 
     return (
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -404,6 +424,11 @@ export default function BusinessDashboard() {
           {walkInSuccess && (
             <View style={styles.successBanner}>
               <Text style={styles.successText}>✅ Added to queue — position #{tickets.length}</Text>
+            </View>
+          )}
+          {!!walkInError && (
+            <View style={[styles.successBanner, { backgroundColor: '#fee2e2' }]}>
+              <Text style={[styles.successText, { color: '#dc2626' }]}>❌ {walkInError}</Text>
             </View>
           )}
 
@@ -494,14 +519,14 @@ export default function BusinessDashboard() {
                 <TextInput
                   style={[styles.serviceEditInput, { backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
                   value={service.name}
-                  onChangeText={v => updateService(service.id, 'name', v)}
+                  onChangeText={v => updateServiceLocal(service.id, 'name', v)}
                   placeholder="Service name" placeholderTextColor={C.placeholder}
                 />
                 <View style={styles.serviceTimeRow}>
                   <TextInput
                     style={[styles.serviceTimeInput, { backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
                     value={String(service.avgTime)}
-                    onChangeText={v => updateService(service.id, 'avgTime', v)}
+                    onChangeText={v => updateServiceLocal(service.id, 'avgTime', v)}
                     keyboardType="number-pad" placeholder="min" placeholderTextColor={C.placeholder}
                   />
                   <Text style={[styles.serviceTimeLabel, { color: C.textMuted }]}>min avg</Text>
@@ -529,8 +554,8 @@ export default function BusinessDashboard() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.saveServicesBtn} onPress={saveServices}>
-            <Text style={styles.addBtnText}>Save Services</Text>
+          <TouchableOpacity style={styles.saveServicesBtn} onPress={saveServices} disabled={savingServices}>
+            {savingServices ? <ActivityIndicator color="#fff" /> : <Text style={styles.addBtnText}>Save Services</Text>}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -835,39 +860,6 @@ export default function BusinessDashboard() {
         </View>
       </Modal>
 
-      {/* Edit wait time modal */}
-      <Modal visible={editModal.visible} transparent animationType="fade"
-        onRequestClose={() => setEditModal({ visible: false, ticket: null, value: '' })}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalBox, { backgroundColor: C.surface }]}>
-            <Text style={[styles.modalTitle, { color: C.text }]}>Edit Wait Time</Text>
-            {editModal.ticket && <Text style={[styles.modalBody, { color: C.textSub }]}>{editModal.ticket.customerName}</Text>}
-            <TextInput
-              style={[styles.editInput, { backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
-              value={editModal.value}
-              onChangeText={v => setEditModal(prev => ({ ...prev, value: v }))}
-              keyboardType="number-pad" placeholder="Minutes"
-              placeholderTextColor={C.placeholder} autoFocus
-            />
-            <Text style={[styles.modalNote, { color: C.textMuted }]}>Enter updated wait time in minutes</Text>
-            <View style={styles.modalBtns}>
-              <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: C.border }]}
-                onPress={() => setEditModal({ visible: false, ticket: null, value: '' })}>
-                <Text style={[styles.modalCancelText, { color: C.textSub }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirmBtn} onPress={() => {
-                const mins = parseInt(editModal.value, 10);
-                if (editModal.ticket && !isNaN(mins) && mins > 0) {
-                  store.updateWaitTime(editModal.ticket.id, mins);
-                }
-                setEditModal({ visible: false, ticket: null, value: '' });
-              }}>
-                <Text style={styles.modalConfirmText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -988,6 +980,8 @@ const styles = StyleSheet.create({
   editWaitRow: { flexDirection: 'row', alignItems: 'center' },
   editLabel: { color: '#0a7ea4', fontSize: 12, fontWeight: '600' },
   ticketActions: { flexDirection: 'row', gap: Spacing.sm, marginTop: 4 },
+  callBtn: { flex: 1, backgroundColor: '#8b5cf6', borderRadius: BorderRadius.md, paddingVertical: 9, alignItems: 'center' },
+  callBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   doneBtn: { flex: 1, backgroundColor: '#10b981', borderRadius: BorderRadius.md, paddingVertical: 9, alignItems: 'center' },
   doneBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   removeBtn: { paddingHorizontal: Spacing.md, paddingVertical: 9, borderRadius: BorderRadius.md, borderWidth: 1, alignItems: 'center' },

@@ -44,21 +44,35 @@ CREATE TABLE IF NOT EXISTS "verification" (
   "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS "Service" (
+-- Business table (links a user to a business profile)
+CREATE TABLE IF NOT EXISTS "Business" (
   "id"        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId"    TEXT NOT NULL UNIQUE REFERENCES "user"("id") ON DELETE CASCADE,
   "name"      TEXT NOT NULL,
+  "type"      TEXT,
   "stripeCustomerId"   TEXT,
   "subscriptionStatus" TEXT NOT NULL DEFAULT 'inactive',
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Service table (belongs to a business)
+CREATE TABLE IF NOT EXISTS "Service" (
+  "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "businessId" TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
+  "name"       TEXT NOT NULL,
+  "avgTime"    INTEGER NOT NULL DEFAULT 15,
+  "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Ticket table (queue entry)
 CREATE TABLE IF NOT EXISTS "Ticket" (
-  "id"            TEXT PRIMARY KEY,
+  "id"            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "position"      INTEGER NOT NULL,
   "status"        TEXT NOT NULL DEFAULT 'Waiting',
-  "serviceId"     TEXT NOT NULL REFERENCES "Service"("id"),
+  "serviceId"     TEXT NOT NULL REFERENCES "Service"("id") ON DELETE CASCADE,
+  "customerName"  TEXT,
   "customerToken" TEXT,
   "phoneNumber"   TEXT,
   "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -66,8 +80,8 @@ CREATE TABLE IF NOT EXISTS "Ticket" (
 );
 
 CREATE TABLE IF NOT EXISTS "Event" (
-  "id"        TEXT PRIMARY KEY,
-  "ticketId"  TEXT NOT NULL REFERENCES "Ticket"("id"),
+  "id"        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "ticketId"  TEXT NOT NULL REFERENCES "Ticket"("id") ON DELETE CASCADE,
   "type"      TEXT NOT NULL,
   "metadata"  JSONB,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()

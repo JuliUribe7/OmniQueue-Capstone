@@ -3,7 +3,7 @@ const eventService = require('./eventService');
 let telnyx;
 try { telnyx = require('./telnyxService'); } catch (e) { telnyx = null; }
 
-async function joinQueue(serviceId, customerToken, phoneNumber) {
+async function joinQueue(serviceId, customerToken, phoneNumber, customerName) {
   // Look up the service
   const serviceRes = await query(
     'SELECT * FROM "Service" WHERE "id" = $1',
@@ -26,10 +26,10 @@ async function joinQueue(serviceId, customerToken, phoneNumber) {
 
     const ticketRes = await client.query(
       `INSERT INTO "Ticket"
-         ("id", "position", "status", "serviceId", "customerToken", "phoneNumber", "createdAt", "updatedAt")
-       VALUES (gen_random_uuid()::text, $1, 'Waiting', $2, $3, $4, NOW(), NOW())
+         ("position", "status", "serviceId", "customerToken", "phoneNumber", "customerName", "createdAt", "updatedAt")
+       VALUES ($1, 'Waiting', $2, $3, $4, $5, NOW(), NOW())
        RETURNING *`,
-      [position, serviceId, customerToken, phoneNumber],
+      [position, serviceId, customerToken, phoneNumber, customerName || null],
     );
     ticket = ticketRes.rows[0];
 
@@ -69,4 +69,37 @@ async function getEntryByToken(customerToken) {
   return res.rows[0] || null;
 }
 
-module.exports = { joinQueue, getEntryByToken };
+async function getQueueByService(serviceId) {
+  const res = await query(
+    'SELECT * FROM "Ticket" WHERE "serviceId" = $1 ORDER BY "position" ASC',
+    [serviceId],
+  );
+  return res.rows;
+}
+
+async function callTicket(ticketId) {
+  const res = await query(
+    `UPDATE "Ticket" SET "status" = 'Called', "updatedAt" = NOW() WHERE "id" = $1 RETURNING *`,
+    [ticketId],
+  );
+  return res.rows[0] || null;
+}
+
+async function markTicketDone(ticketId) {
+  const res = await query(
+    `UPDATE "Ticket" SET "status" = 'Done', "updatedAt" = NOW() WHERE "id" = $1 RETURNING *`,
+    [ticketId],
+  );
+  return res.rows[0] || null;
+}
+
+async function removeTicket(ticketId) {
+  await query('DELETE FROM "Event" WHERE "ticketId" = $1', [ticketId]);
+  const res = await query(
+    'DELETE FROM "Ticket" WHERE "id" = $1 RETURNING *',
+    [ticketId],
+  );
+  return res.rows[0] || null;
+}
+
+module.exports = { joinQueue, getEntryByToken, getQueueByService, callTicket, markTicketDone, removeTicket };
