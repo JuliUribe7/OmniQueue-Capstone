@@ -132,6 +132,8 @@ export default function SignupPage() {
             placeholderTextColor={C.placeholder}
             value={businessName}
             onChangeText={t => { setBusinessName(t); setError(''); }}
+            id="business-name"
+            autoComplete="organization"
           />
 
           <Text style={[styles.label, { color: C.textSub }]}>Business Type</Text>
@@ -160,6 +162,8 @@ export default function SignupPage() {
             onChangeText={t => { setEmail(t); setError(''); }}
             autoCapitalize="none"
             keyboardType="email-address"
+            id="email"
+            autoComplete="email"
           />
 
           <Text style={[styles.label, { color: C.textSub }]}>Password</Text>
@@ -171,6 +175,8 @@ export default function SignupPage() {
               value={password}
               onChangeText={t => { setPassword(t); setError(''); }}
               secureTextEntry={!showPass}
+              id="password"
+              autoComplete="new-password"
             />
             <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowPass(v => !v)}>
               <Text style={styles.eyeIcon}>{showPass ? '🙈' : '👁️'}</Text>
@@ -186,6 +192,8 @@ export default function SignupPage() {
               value={confirmPass}
               onChangeText={t => { setConfirmPass(t); setError(''); }}
               secureTextEntry={!showConfirm}
+              id="confirm-password"
+              autoComplete="new-password"
             />
             <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowConfirm(v => !v)}>
               <Text style={styles.eyeIcon}>{showConfirm ? '🙈' : '👁️'}</Text>
