@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS "verification" (
 CREATE TABLE IF NOT EXISTS "Service" (
   "id"        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "name"      TEXT NOT NULL,
+  "stripeCustomerId"   TEXT,
+  "subscriptionStatus" TEXT NOT NULL DEFAULT 'inactive',
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
