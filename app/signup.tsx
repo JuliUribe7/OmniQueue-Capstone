@@ -63,7 +63,7 @@ export default function SignupPage() {
   const [showPass, setShowPass]         = useState(false);
   const [showConfirm, setShowConfirm]   = useState(false);
 
-  function handleSignup() {
+  async function handleSignup() {
     if (!businessName.trim()) { setError('Please enter your business name.'); return; }
     if (!email.trim())        { setError('Please enter your email.'); return; }
     if (!password.trim())     { setError('Please enter a password.'); return; }
@@ -73,15 +73,32 @@ export default function SignupPage() {
     setLoading(true);
     setError('');
 
-    setTimeout(() => {
+    try {
+      // Register in the backend so credentials are shared across all devices
+      const res = await fetch('/api/auth/sign-up/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: email.trim(), password, name: businessName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.message ?? 'Could not create account. Email may already be in use.');
+        return;
+      }
+
+      // Also save locally so this device has the business type and services
       const business = businessStore.signup(businessName.trim(), email.trim(), password, type);
-      setLoading(false);
       if (business) {
         router.replace(`/${business.id}/dashboard` as any);
       } else {
         setError('An account with that email already exists.');
       }
-    }, 300);
+    } catch (e) {
+      setError('Could not connect to server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
