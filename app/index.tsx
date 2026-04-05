@@ -68,22 +68,45 @@ export default function LandingPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  function handleBusinessLogin() {
+  async function handleBusinessLogin() {
     if (!email.trim() || !password.trim()) {
       setLoginError('Please enter your email and password.');
       return;
     }
     setLoggingIn(true);
     setLoginError('');
-    setTimeout(() => {
-      const business = businessStore.login(email.trim(), password);
-      setLoggingIn(false);
+    try {
+      const res = await fetch('/api/auth/sign-in/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLoginError(data?.message ?? 'Invalid email or password.');
+        return;
+      }
+      // Look up the business locally by email
+      let business = businessStore.getAll().find(b => b.email === email.trim());
+
+      // If no local profile (e.g. teammate logging in from a different machine),
+      // create one automatically using the backend response data
+      if (!business) {
+        const name = data.user?.name ?? email.trim().split('@')[0];
+        business = businessStore.signup(name, email.trim(), password, 'other') ?? undefined;
+      }
+
       if (business) {
         router.replace(`/${business.id}/dashboard` as any);
       } else {
-        setLoginError('Invalid email or password.');
+        setLoginError('Login successful but could not load business profile.');
       }
-    }, 300);
+    } catch (e) {
+      setLoginError('Could not connect to server. Please try again.');
+    } finally {
+      setLoggingIn(false);
+    }
   }
 
   return (
