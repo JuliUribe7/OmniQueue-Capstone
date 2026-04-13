@@ -63,7 +63,11 @@ async function joinQueue(serviceId, customerToken, phoneNumber, customerName) {
 async function getEntryByToken(customerToken) {
   if (!customerToken) return null;
   const res = await query(
-    'SELECT * FROM "Ticket" WHERE "customerToken" = $1 ORDER BY "createdAt" DESC LIMIT 1',
+    `SELECT t.*, s."name" as "serviceName", s."avgTime"
+     FROM "Ticket" t
+     JOIN "Service" s ON t."serviceId" = s."id"
+     WHERE t."customerToken" = $1
+     ORDER BY t."createdAt" DESC LIMIT 1`,
     [customerToken],
   );
   return res.rows[0] || null;

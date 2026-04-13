@@ -72,6 +72,77 @@ async function getQueueForBusiness(businessId) {
   return res.rows;
 }
 
+async function getStaff(businessId) {
+  const res = await query(
+    'SELECT * FROM "Staff" WHERE "businessId" = $1 ORDER BY "createdAt" ASC',
+    [businessId],
+  );
+  return res.rows;
+}
+
+async function addStaff(businessId, name, role, phone, photoUrl) {
+  const res = await query(
+    `INSERT INTO "Staff" ("businessId", "name", "role", "phone", "photoUrl")
+     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+    [businessId, name, role || 'Staff', phone || null, photoUrl || null],
+  );
+  return res.rows[0];
+}
+
+async function deleteStaff(staffId, businessId) {
+  const res = await query(
+    'DELETE FROM "Staff" WHERE "id" = $1 AND "businessId" = $2 RETURNING *',
+    [staffId, businessId],
+  );
+  return res.rows[0] || null;
+}
+
+async function createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time) {
+  const res = await query(
+    `INSERT INTO "Appointment" ("businessId", "serviceId", "staffId", "customerName", "phoneNumber", "date", "time")
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [businessId, serviceId || null, staffId || null, customerName, phoneNumber, date, time],
+  );
+  return res.rows[0];
+}
+
+async function getPublicAppointments(businessId, date) {
+  const res = await query(
+    'SELECT "time", "date" FROM "Appointment" WHERE "businessId" = $1 AND "date" = $2',
+    [businessId, date],
+  );
+  return res.rows;
+}
+
+async function getAllAppointments(businessId) {
+  const res = await query(
+    `SELECT a.*, s."name" as "serviceName", st."name" as "staffName"
+     FROM "Appointment" a
+     LEFT JOIN "Service" s ON a."serviceId" = s."id"
+     LEFT JOIN "Staff" st ON a."staffId" = st."id"
+     WHERE a."businessId" = $1
+     ORDER BY a."date" ASC, a."time" ASC`,
+    [businessId],
+  );
+  return res.rows;
+}
+
+async function getSubscription(businessId) {
+  const res = await query(
+    'SELECT "plan" FROM "Business" WHERE "id" = $1',
+    [businessId],
+  );
+  return res.rows[0] || null;
+}
+
+async function updateSubscription(businessId, plan) {
+  const res = await query(
+    `UPDATE "Business" SET "plan" = $1, "updatedAt" = NOW() WHERE "id" = $2 RETURNING *`,
+    [plan, businessId],
+  );
+  return res.rows[0] || null;
+}
+
 async function getAllBusinessesWithQueues() {
   const res = await query(
     `SELECT b.id, b.name, b.type,
@@ -99,5 +170,13 @@ module.exports = {
   updateService,
   deleteService,
   getQueueForBusiness,
+  getStaff,
+  addStaff,
+  deleteStaff,
+  createAppointment,
+  getPublicAppointments,
+  getAllAppointments,
+  getSubscription,
+  updateSubscription,
   getAllBusinessesWithQueues,
 };
