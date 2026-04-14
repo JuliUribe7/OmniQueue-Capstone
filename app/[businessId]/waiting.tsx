@@ -106,14 +106,22 @@ export default function CustomerWaiting() {
   }
 
   const position = ticket.position;
-  const wait = ticket.avgTime * position;
+  const avgTime = ticket.avgTime ?? 0;
+  const wait = avgTime * position;
+
+  function formatWait(mins: number) {
+    if (!avgTime) return '—';
+    if (mins <= 0) return 'Soon';
+    if (mins < 60) return `${mins}m`;
+    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
 
       <View style={styles.header}>
-        <Text style={styles.businessName}>{ticket.serviceName}</Text>
+        <Text style={styles.businessName}>{ticket.serviceName ?? 'Your Service'}</Text>
         <Text style={styles.headerSub}>OmniQueue</Text>
       </View>
 
@@ -133,9 +141,7 @@ export default function CustomerWaiting() {
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statBox}>
-            <Text style={styles.statNum}>
-              {wait <= 0 ? 'Soon' : wait < 60 ? `${wait}m` : `${Math.floor(wait / 60)}h ${wait % 60}m`}
-            </Text>
+            <Text style={styles.statNum}>{formatWait(wait)}</Text>
             <Text style={styles.statLbl}>est. wait</Text>
           </View>
         </View>

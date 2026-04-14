@@ -48,6 +48,29 @@ export interface ApiTicket {
   avgTime: number;
 }
 
+export interface ApiStaff {
+  id: string;
+  businessId: string;
+  name: string;
+  role: string;
+  phone: string;
+  photoUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiAppointment {
+  id: string;
+  businessId: string;
+  serviceId: string;
+  staffId: string;
+  customerName: string;
+  phoneNumber: string;
+  date: string;
+  time: string;
+  createdAt: string;
+}
+
 export const api = {
   // Auth
   signUp: (email: string, password: string, name: string) =>
@@ -87,6 +110,37 @@ export const api = {
     apiFetch(`/api/tickets/${ticketId}/call`, { method: 'PUT' }),
   removeTicket: (ticketId: string) =>
     apiFetch(`/api/tickets/${ticketId}`, { method: 'DELETE' }),
+
+  // Staff (auth required)
+  getStaff: (): Promise<{ staff: ApiStaff[] }> =>
+    apiFetch('/api/businesses/me/staff'),
+  addStaff: (name: string, role: string, phone: string, photoUrl: string): Promise<{ staff: ApiStaff }> =>
+    apiFetch('/api/businesses/me/staff', { method: 'POST', body: JSON.stringify({ name, role, phone, photoUrl }) }),
+  deleteStaff: (staffId: string) =>
+    apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' }),
+
+  // Staff (public — customer portal)
+  getPublicStaff: (businessId: string): Promise<{ staff: ApiStaff[] }> =>
+    apiFetch(`/api/businesses/${businessId}/staff`),
+
+  // Appointments (public — customer-facing)
+  createAppointment: (businessId: string, serviceId: string, staffId: string, customerName: string, phoneNumber: string, date: string, time: string): Promise<{ appointment: ApiAppointment }> =>
+    apiFetch(`/api/businesses/${businessId}/appointments`, {
+      method: 'POST',
+      body: JSON.stringify({ serviceId, staffId, customerName, phoneNumber, date, time }),
+    }),
+  getPublicAppointments: (businessId: string, date: string): Promise<{ bookedSlots: { time: string; count: number }[] }> =>
+    apiFetch(`/api/businesses/${businessId}/appointments/public?date=${encodeURIComponent(date)}`),
+
+  // Appointments (auth — staff dashboard)
+  getMyAppointments: (): Promise<{ appointments: ApiAppointment[] }> =>
+    apiFetch('/api/businesses/me/appointments'),
+
+  // Subscription
+  getSubscription: (): Promise<{ plan: 'basic' | 'pro' }> =>
+    apiFetch('/api/businesses/me/subscription'),
+  updateSubscription: (plan: 'basic' | 'pro'): Promise<{ plan: 'basic' | 'pro' }> =>
+    apiFetch('/api/businesses/me/subscription', { method: 'PUT', body: JSON.stringify({ plan }) }),
 
   // Admin
   getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
