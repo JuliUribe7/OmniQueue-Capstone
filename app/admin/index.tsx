@@ -5,14 +5,25 @@ import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Image,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
-import { businessStore, Business } from '../../store/businessStore';
-import { getQueueStore } from '../../store/queueStore';
+import { api, ApiTicket } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
 
+const ADMIN_PASSWORD = 'admin1234';
+
 type Tab = 'businesses' | 'analytics' | 'liveview' | 'settings';
+
+type AdminBusiness = {
+  id: string;
+  name: string;
+  type: string;
+  createdAt: string;
+  services: { id: string; name: string; avgTime: number }[];
+  tickets: ApiTicket[];
+};
 
 const LIGHT = {
   bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#f0f2f5', border: '#e2e8f0',
@@ -39,24 +50,20 @@ function readTheme(): boolean {
 export default function AdminDashboard() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>('businesses');
-  const [businesses, setBusinesses] = useState<Business[]>(businessStore.getAll());
-  const [search, setSearch] = useState('');
-  const [selectedBizId, setSelectedBizId] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [adminPass, setAdminPass] = useState('');
   const [adminError, setAdminError] = useState('');
-  const [checking, setChecking] = useState(true);
 
-  // Theme — must be declared before early returns
+  const [businesses, setBusinesses] = useState<AdminBusiness[]>([]);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [selectedBizId, setSelectedBizId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
   const [isDark, setIsDark] = useState(readTheme);
-
-  // Settings tab state — must be before early returns
   const [settingsNewPass, setSettingsNewPass] = useState('');
   const [settingsConfirmPass, setSettingsConfirmPass] = useState('');
   const [settingsMsg, setSettingsMsg] = useState('');
   const [showSettingsPass, setShowSettingsPass] = useState(false);
-
-  // QR panel state — must be before early returns
   const [qrBizId, setQrBizId] = useState<string | null>(null);
   const [smsPhone, setSmsPhone] = useState('');
   const [smsSent, setSmsSent] = useState(false);
@@ -78,27 +85,35 @@ export default function AdminDashboard() {
 
   const C = isDark ? DARK : LIGHT;
 
+  // Load + poll data once logged in
   useEffect(() => {
-    const timer = setTimeout(() => {
-      const session = businessStore.getSession();
-      if (session?.type === 'admin') setIsLoggedIn(true);
-      setChecking(false);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    const unsub = businessStore.subscribe(() => setBusinesses(businessStore.getAll()));
-    return unsub;
-  }, []);
+    if (!isLoggedIn) return;
+    async function load() {
+      try {
+        const { businesses: biz } = await api.getAdminBusinesses();
+        setBusinesses(biz);
+      } catch {}
+      setDataLoading(false);
+    }
+    setDataLoading(true);
+    load();
+    const id = setInterval(load, 5000);
+    return () => clearInterval(id);
+  }, [isLoggedIn]);
 
   function handleAdminLogin() {
-    const ok = businessStore.adminLogin(adminPass);
-    if (ok) { setIsLoggedIn(true); setAdminError(''); }
-    else setAdminError('Incorrect password.');
+    if (adminPass === ADMIN_PASSWORD) {
+      setIsLoggedIn(true);
+      setAdminError('');
+    } else {
+      setAdminError('Incorrect password.');
+    }
   }
 
-  if (checking) return <View style={[styles.container, { backgroundColor: C.bg }]} />;
+  function handleLogout() {
+    setIsLoggedIn(false);
+    router.replace('/');
+  }
 
   if (!isLoggedIn) {
     return (
@@ -119,6 +134,7 @@ export default function AdminDashboard() {
             onChangeText={t => { setAdminPass(t); setAdminError(''); }}
             secureTextEntry
             autoFocus
+            onSubmitEditing={handleAdminLogin}
           />
           {adminError ? <Text style={styles.loginError}>{adminError}</Text> : null}
           <TouchableOpacity style={styles.loginBtn} onPress={handleAdminLogin}>
@@ -132,19 +148,13 @@ export default function AdminDashboard() {
     );
   }
 
-  function handleLogout() {
-    businessStore.logout();
-    router.replace('/');
-  }
-
+  // ── Derived stats ───────────────────────────────────────────────────────────
   const businessStats = businesses.map(b => {
-    const store = getQueueStore(b.id);
-    const tickets = store.getTickets();
+    const tickets = b.tickets ?? [];
     const waiting = tickets.filter(t => t.status === 'Waiting').length;
     const called  = tickets.filter(t => t.status === 'Called').length;
     const avgWait = tickets.length > 0
-      ? Math.round(tickets.reduce((s, t) => s + t.estimatedWait, 0) / tickets.length)
-      : 0;
+      ? Math.round(tickets.reduce((s, t) => s + (t.avgTime ?? 0), 0) / tickets.length) : 0;
     return { business: b, tickets, waiting, called, avgWait };
   });
 
@@ -163,7 +173,6 @@ export default function AdminDashboard() {
     salon: 'Salon', dental: 'Dental', other: 'Other',
   };
 
-  // ── Businesses tab ─────────────────────────────────────────────────────────
   function getPortalUrl(bizId: string) {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     return `${origin}/${bizId}`;
@@ -183,7 +192,16 @@ export default function AdminDashboard() {
     setTimeout(() => setLinkCopied(false), 2000);
   }
 
+  // ── Businesses tab ─────────────────────────────────────────────────────────
   function renderBusinesses() {
+    if (dataLoading && businesses.length === 0) {
+      return (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#2563eb" />
+        </View>
+      );
+    }
+
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
         <TextInput
@@ -228,10 +246,10 @@ export default function AdminDashboard() {
 
               <View style={styles.businessStats}>
                 {[
-                  { val: waiting, label: 'Waiting', color: C.text },
-                  { val: called,  label: 'Called',  color: '#10b981' },
+                  { val: waiting, label: 'Waiting',  color: C.text },
+                  { val: called,  label: 'Called',   color: '#10b981' },
                   { val: avgWait, label: 'Avg Wait', color: '#8b5cf6', suffix: 'm' },
-                  { val: business.services.length, label: 'Services', color: '#f59e0b' },
+                  { val: (business.services ?? []).length, label: 'Services', color: '#f59e0b' },
                 ].map(({ val, label, color, suffix }) => (
                   <View key={label} style={[styles.bStat, { backgroundColor: C.surfaceAlt }]}>
                     <Text style={[styles.bStatNum, { color }]}>{val}{suffix ?? ''}</Text>
@@ -241,7 +259,7 @@ export default function AdminDashboard() {
               </View>
 
               <View style={styles.servicesList}>
-                {business.services.map(s => (
+                {(business.services ?? []).map(s => (
                   <View key={s.id} style={[styles.serviceTag, { backgroundColor: C.surfaceAlt }]}>
                     <Text style={[styles.serviceTagText, { color: C.textSub }]}>{s.name} · {s.avgTime}m</Text>
                   </View>
@@ -255,26 +273,16 @@ export default function AdminDashboard() {
                 </Text>
               </View>
 
-              {/* QR Panel — expands inline when toggled */}
               {isQrOpen && (
                 <View style={[styles.qrPanel, { backgroundColor: C.surfaceAlt, borderTopColor: C.border }]}>
                   <View style={styles.qrPanelInner}>
-                    {/* QR Code */}
                     <View style={styles.qrImageWrap}>
-                      <Image
-                        source={{ uri: qrSrc }}
-                        style={styles.qrImage}
-                        resizeMode="contain"
-                      />
+                      <Image source={{ uri: qrSrc }} style={styles.qrImage} resizeMode="contain" />
                       <Text style={[styles.qrScanHint, { color: C.textMuted }]}>Scan to open portal</Text>
                     </View>
-
-                    {/* Share options */}
                     <View style={styles.qrShareCol}>
                       <Text style={[styles.qrPortalLabel, { color: C.textMuted }]}>Portal URL</Text>
                       <Text style={[styles.qrPortalUrl, { color: C.primary }]} numberOfLines={1}>{portalUrl}</Text>
-
-                      {/* Copy link */}
                       <TouchableOpacity
                         style={[styles.qrCopyBtn, { backgroundColor: linkCopied ? '#10b981' : C.surface, borderColor: linkCopied ? '#10b981' : C.border }]}
                         onPress={() => copyLink(portalUrl)}
@@ -283,8 +291,6 @@ export default function AdminDashboard() {
                           {linkCopied ? '✓ Copied!' : '📋 Copy Link'}
                         </Text>
                       </TouchableOpacity>
-
-                      {/* Share via SMS */}
                       <Text style={[styles.qrSmsLabel, { color: C.textMuted }]}>Share via SMS</Text>
                       <View style={styles.qrSmsRow}>
                         <TextInput
@@ -326,10 +332,10 @@ export default function AdminDashboard() {
         <Text style={[styles.sectionTitle, { color: C.text }]}>Platform Overview</Text>
         <View style={styles.analyticsGrid}>
           {[
-            { val: totalBusinesses, label: 'Businesses', color: C.primary,  accent: C.primary },
-            { val: totalWaiting,    label: 'Waiting Now', color: '#f59e0b', accent: '#f59e0b' },
-            { val: totalCalled,     label: 'Called Now',  color: '#10b981', accent: '#10b981' },
-            { val: totalInQueue,    label: 'In Queue',    color: '#8b5cf6', accent: '#8b5cf6' },
+            { val: totalBusinesses, label: 'Businesses',  color: C.primary,  accent: C.primary },
+            { val: totalWaiting,    label: 'Waiting Now', color: '#f59e0b',  accent: '#f59e0b' },
+            { val: totalCalled,     label: 'Called Now',  color: '#10b981',  accent: '#10b981' },
+            { val: totalInQueue,    label: 'In Queue',    color: '#8b5cf6',  accent: '#8b5cf6' },
           ].map(({ val, label, color, accent }) => (
             <View key={label} style={[styles.analyticsCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
               <Text style={[styles.analyticsNum, { color }]}>{val}</Text>
@@ -384,24 +390,9 @@ export default function AdminDashboard() {
   // ── Live View tab ──────────────────────────────────────────────────────────
   function renderLiveView() {
     const selectedBiz = selectedBizId ? businesses.find(b => b.id === selectedBizId) : null;
-    const store = selectedBizId ? getQueueStore(selectedBizId) : null;
-    const tickets = store ? store.getTickets() : [];
+    const tickets = selectedBiz?.tickets ?? [];
     const waiting = tickets.filter(t => t.status === 'Waiting');
     const called  = tickets.filter(t => t.status === 'Called');
-
-    function VisitBadge({ phone }: { phone: string }) {
-      const count = tickets.filter(t => t.phoneNumber === phone).length;
-      if (count > 1) return (
-        <View style={styles.visitBadgeBlue}>
-          <Text style={styles.visitBadgeBlueText}>Repeat</Text>
-        </View>
-      );
-      return (
-        <View style={styles.visitBadgeAmber}>
-          <Text style={styles.visitBadgeAmberText}>1st Visit</Text>
-        </View>
-      );
-    }
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
@@ -435,7 +426,7 @@ export default function AdminDashboard() {
                 { val: waiting.length, label: 'Waiting',  color: C.text },
                 { val: called.length,  label: 'Called',   color: '#10b981' },
                 { val: tickets.length, label: 'Total',    color: '#8b5cf6' },
-                { val: selectedBiz.services.length, label: 'Services', color: '#f59e0b' },
+                { val: (selectedBiz.services ?? []).length, label: 'Services', color: '#f59e0b' },
               ].map(({ val, label, color }) => (
                 <View key={label} style={[styles.liveStat, { backgroundColor: C.surface, borderColor: C.border }]}>
                   <Text style={[styles.liveStatNum, { color }]}>{val}</Text>
@@ -452,10 +443,7 @@ export default function AdminDashboard() {
                     <View style={styles.ticketLeft}>
                       <Text style={styles.ticketPos}>#{ticket.position}</Text>
                       <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                          <Text style={[styles.ticketName, { color: C.text }]}>{ticket.customerName}</Text>
-                          {ticket.phoneNumber ? <VisitBadge phone={ticket.phoneNumber} /> : null}
-                        </View>
+                        <Text style={[styles.ticketName, { color: C.text }]}>{ticket.customerName}</Text>
                         <Text style={[styles.ticketService, { color: C.textSub }]}>{ticket.serviceName}</Text>
                         {ticket.phoneNumber ? <Text style={[styles.ticketPhone, { color: C.textMuted }]}>{ticket.phoneNumber}</Text> : null}
                       </View>
@@ -469,27 +457,25 @@ export default function AdminDashboard() {
             )}
 
             <Text style={[styles.sectionTitle, { color: C.text }]}>Waiting ({waiting.length})</Text>
-            {waiting.length === 0 && (
+            {waiting.length === 0 ? (
               <View style={styles.empty}>
                 <Text style={[styles.emptyText, { color: C.textMuted }]}>No one waiting right now</Text>
               </View>
-            )}
-            {waiting.map(ticket => (
-              <View key={ticket.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <View style={styles.ticketLeft}>
-                  <Text style={styles.ticketPos}>#{ticket.position}</Text>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            ) : (
+              waiting.map(ticket => (
+                <View key={ticket.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                  <View style={styles.ticketLeft}>
+                    <Text style={styles.ticketPos}>#{ticket.position}</Text>
+                    <View style={{ flex: 1 }}>
                       <Text style={[styles.ticketName, { color: C.text }]}>{ticket.customerName}</Text>
-                      {ticket.phoneNumber ? <VisitBadge phone={ticket.phoneNumber} /> : null}
+                      <Text style={[styles.ticketService, { color: C.textSub }]}>{ticket.serviceName}</Text>
+                      {ticket.phoneNumber ? <Text style={[styles.ticketPhone, { color: C.textMuted }]}>{ticket.phoneNumber}</Text> : null}
                     </View>
-                    <Text style={[styles.ticketService, { color: C.textSub }]}>{ticket.serviceName}</Text>
-                    {ticket.phoneNumber ? <Text style={[styles.ticketPhone, { color: C.textMuted }]}>{ticket.phoneNumber}</Text> : null}
                   </View>
+                  <Text style={styles.ticketWait}>~{ticket.avgTime}m</Text>
                 </View>
-                <Text style={styles.ticketWait}>~{ticket.estimatedWait}m</Text>
-              </View>
-            ))}
+              ))
+            )}
           </>
         )}
       </ScrollView>
@@ -504,7 +490,7 @@ export default function AdminDashboard() {
       setSettingsMsg('Admin password updated successfully.');
       setSettingsNewPass(''); setSettingsConfirmPass('');
     }
-    const totalServices = businesses.reduce((s, b) => s + b.services.length, 0);
+    const totalServices = businesses.reduce((s, b) => s + (b.services ?? []).length, 0);
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
@@ -641,6 +627,7 @@ const SIDEBAR_W = 160;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#151718' },
   body: { flex: 1, flexDirection: 'row' },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { alignItems: 'center', padding: 32 },
   emptyText: { color: '#6b7280', fontSize: 14 },
 
@@ -648,13 +635,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e2022', borderRadius: 16, padding: 28,
     width: '100%', maxWidth: 400, alignItems: 'stretch',
   },
-  loginLogo: { fontSize: 28, fontWeight: '800', color: '#fff', textAlign: 'center', marginBottom: 4 },
-  loginTitle: { fontSize: 18, fontWeight: '700', color: '#fff', textAlign: 'center', marginBottom: 6 },
-  loginSubtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 20 },
+  loginLogo: { fontSize: 28, fontWeight: '800', textAlign: 'center', marginBottom: 4 },
+  loginTitle: { fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 6 },
+  loginSubtitle: { fontSize: 14, textAlign: 'center', marginBottom: 20 },
   loginInput: {
-    backgroundColor: '#2a2d2f', borderRadius: 10, paddingHorizontal: 14,
-    paddingVertical: 12, color: '#fff', fontSize: 15, marginBottom: 12,
-    borderWidth: 1, borderColor: '#333',
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12,
+    fontSize: 15, marginBottom: 12, borderWidth: 1,
   },
   loginError: { color: '#f87171', fontSize: 13, marginBottom: 10, textAlign: 'center' },
   loginBtn: {
@@ -663,55 +649,49 @@ const styles = StyleSheet.create({
   },
   loginBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   loginBack: { alignItems: 'center' },
-  loginBackText: { color: '#555', fontSize: 13 },
+  loginBackText: { fontSize: 13 },
 
   sidebar: {
-    width: SIDEBAR_W, backgroundColor: '#111',
-    borderRightWidth: 1, borderRightColor: '#2a2a2a',
+    width: SIDEBAR_W, borderRightWidth: 1,
     paddingVertical: Spacing.md, justifyContent: 'space-between',
   },
   sidebarTop: { paddingHorizontal: Spacing.md, marginBottom: Spacing.lg },
-  sidebarTitle: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  sidebarRole: { color: '#2563eb', fontSize: 11, marginTop: 2, fontWeight: '600' },
+  sidebarTitle: { fontSize: 15, fontWeight: '800' },
+  sidebarRole: { fontSize: 11, marginTop: 2, fontWeight: '600' },
   navItems: { flex: 1, gap: 4, paddingHorizontal: Spacing.sm },
   navItem: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 10, paddingHorizontal: Spacing.sm,
     borderRadius: BorderRadius.md, gap: Spacing.sm,
   },
-  navItemActive: { backgroundColor: '#2563eb22' },
+  navItemActive: {},
   navIcon: { fontSize: 16 },
-  navLabel: { color: '#6b7280', fontSize: 13, fontWeight: '600' },
-  navLabelActive: { color: '#2563eb' },
+  navLabel: { fontSize: 13, fontWeight: '600' },
+  navLabelActive: {},
   sidebarBottom: { paddingHorizontal: Spacing.md },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
   logoutIcon: { fontSize: 14 },
-  logoutText: { color: '#6b7280', fontSize: 13 },
+  logoutText: { fontSize: 13 },
 
   main: { flex: 1 },
   topBar: {
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
-    borderBottomWidth: 1, borderBottomColor: '#2a2a2a',
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
-  topBarTitle: { color: '#fff', fontSize: 18, fontWeight: '700' },
+  topBarTitle: { fontSize: 18, fontWeight: '700' },
   tabContent: { padding: Spacing.md, gap: Spacing.md },
 
   search: {
-    backgroundColor: '#1e2022', borderRadius: BorderRadius.md,
-    paddingHorizontal: 14, paddingVertical: 10, color: '#fff',
-    fontSize: 14, borderWidth: 1, borderColor: '#333',
+    borderRadius: BorderRadius.md, paddingHorizontal: 14,
+    paddingVertical: 10, fontSize: 14, borderWidth: 1,
   },
 
-  businessCard: {
-    backgroundColor: '#1e2022', borderRadius: BorderRadius.lg,
-    padding: Spacing.md, gap: Spacing.sm, borderWidth: 1, borderColor: '#2a2a2a',
-  },
+  businessCard: { borderRadius: BorderRadius.lg, padding: Spacing.md, gap: Spacing.sm, borderWidth: 1 },
   businessCardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   businessInfo: { flex: 1, gap: 2 },
-  businessName: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  businessType: { color: '#2563eb', fontSize: 12, fontWeight: '600' },
-  businessId: { color: '#444', fontSize: 11 },
+  businessName: { fontSize: 16, fontWeight: '700' },
+  businessType: { fontSize: 12, fontWeight: '600' },
+  businessId: { fontSize: 11 },
   statusDot: { width: 10, height: 10, borderRadius: 5 },
 
   businessStats: { flexDirection: 'row', gap: Spacing.sm },
@@ -756,9 +736,7 @@ const styles = StyleSheet.create({
   activeQueueCount: { color: '#f59e0b', fontSize: 13, fontWeight: '600' },
   activeQueueWait: { fontSize: 11, marginTop: 2 },
 
-  bizPill: {
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1,
-  },
+  bizPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1 },
   bizPillActive: { backgroundColor: '#1e3a8a', borderColor: '#2563eb' },
   bizPillText: { fontSize: 13, fontWeight: '600' },
   bizPillTextActive: { color: '#fff' },
@@ -782,11 +760,6 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   statusBadgeText: { fontSize: 12, fontWeight: '700' },
 
-  visitBadgeAmber: { backgroundColor: '#fef3c7', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  visitBadgeAmberText: { color: '#92400e', fontSize: 10, fontWeight: '700' },
-  visitBadgeBlue: { backgroundColor: '#dbeafe', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  visitBadgeBlueText: { color: '#1e40af', fontSize: 10, fontWeight: '700' },
-
   settingsSection: { borderRadius: BorderRadius.lg, padding: Spacing.md, borderWidth: 1 },
   settingsSectionTitle: { fontSize: 15, fontWeight: '700', marginBottom: 4 },
   settingsSectionSub: { fontSize: 13, lineHeight: 18 },
@@ -806,42 +779,21 @@ const styles = StyleSheet.create({
   statRowLabel: { fontSize: 13 },
   statRowValue: { fontSize: 18, fontWeight: '800' },
 
-  // QR panel
-  qrToggleBtn: {
-    borderWidth: 1, borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 5,
-  },
+  qrToggleBtn: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   qrToggleBtnText: { fontSize: 12, fontWeight: '700' },
-
-  qrPanel: {
-    marginTop: 4, borderTopWidth: 1,
-    paddingTop: 16,
-  },
+  qrPanel: { marginTop: 4, borderTopWidth: 1, paddingTop: 16 },
   qrPanelInner: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
-
   qrImageWrap: { alignItems: 'center', gap: 6 },
   qrImage: { width: 140, height: 140, borderRadius: 8, backgroundColor: '#fff' },
   qrScanHint: { fontSize: 11 },
-
   qrShareCol: { flex: 1, gap: 8 },
   qrPortalLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
   qrPortalUrl: { fontSize: 13, fontWeight: '600' },
-
-  qrCopyBtn: {
-    borderWidth: 1, borderRadius: 8,
-    paddingVertical: 8, alignItems: 'center',
-  },
+  qrCopyBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
   qrCopyBtnText: { fontSize: 13, fontWeight: '600' },
-
   qrSmsLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4 },
   qrSmsRow: { flexDirection: 'row', gap: 8 },
-  qrSmsInput: {
-    borderWidth: 1, borderRadius: 8,
-    paddingHorizontal: 10, paddingVertical: 8, fontSize: 13,
-  },
-  qrSmsBtn: {
-    backgroundColor: '#2563eb', borderRadius: 8,
-    paddingHorizontal: 14, paddingVertical: 8, justifyContent: 'center',
-  },
+  qrSmsInput: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 13 },
+  qrSmsBtn: { backgroundColor: '#2563eb', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, justifyContent: 'center' },
   qrSmsBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
 });

@@ -3,7 +3,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
-    }
+    },
+    "ignoreDeprecations": "5.0"
   },
   "extends": "expo/tsconfig.base"
 }

@@ -7,6 +7,8 @@ const requireAuth = require('../middleware/requireAuth');
 router.get('/api/admin/businesses', businessController.getAllBusinesses);
 router.get('/api/businesses/:businessId/public', businessController.getPublicBusiness);
 router.post('/api/businesses/:businessId/queue/join', businessController.joinQueue);
+router.post('/api/businesses/:businessId/appointments', businessController.createAppointment);
+router.get('/api/businesses/:businessId/appointments/public', businessController.getPublicAppointments);
 
 router.use(requireAuth);
 
@@ -24,5 +26,17 @@ router.delete('/api/services/:serviceId', businessController.deleteService);
 // Queue
 router.get('/api/businesses/me/queue', businessController.getQueue);
 router.post('/api/businesses/me/queue/walkin', businessController.addWalkin);
+
+// Staff
+router.get('/api/businesses/me/staff', businessController.getStaff);
+router.post('/api/businesses/me/staff', businessController.addStaff);
+router.delete('/api/staff/:staffId', businessController.deleteStaff);
+
+// Appointments (auth)
+router.get('/api/businesses/me/appointments', businessController.getMyAppointments);
+
+// Subscription
+router.get('/api/businesses/me/subscription', businessController.getSubscription);
+router.put('/api/businesses/me/subscription', businessController.updateSubscription);
 
 module.exports = router;

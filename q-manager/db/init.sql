@@ -50,8 +50,6 @@ CREATE TABLE IF NOT EXISTS "Business" (
   "userId"    TEXT NOT NULL UNIQUE REFERENCES "user"("id") ON DELETE CASCADE,
   "name"      TEXT NOT NULL,
   "type"      TEXT,
-  "stripeCustomerId"   TEXT,
-  "subscriptionStatus" TEXT NOT NULL DEFAULT 'inactive',
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -77,6 +75,31 @@ CREATE TABLE IF NOT EXISTS "Ticket" (
   "phoneNumber"   TEXT,
   "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Staff table
+CREATE TABLE IF NOT EXISTS "Staff" (
+  "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "businessId" TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
+  "name"       TEXT NOT NULL,
+  "role"       TEXT NOT NULL DEFAULT 'Staff',
+  "phone"      TEXT,
+  "photoUrl"   TEXT,
+  "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Appointment table
+CREATE TABLE IF NOT EXISTS "Appointment" (
+  "id"           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "businessId"   TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
+  "serviceId"    TEXT REFERENCES "Service"("id"),
+  "staffId"      TEXT REFERENCES "Staff"("id"),
+  "customerName" TEXT NOT NULL,
+  "phoneNumber"  TEXT NOT NULL,
+  "date"         TEXT NOT NULL,
+  "time"         TEXT NOT NULL,
+  "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS "Event" (

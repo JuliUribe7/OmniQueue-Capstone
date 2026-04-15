@@ -3,16 +3,16 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, TextInput, StyleSheet,
+  View, Text, TouchableOpacity, TextInput, StyleSheet,
   SafeAreaView, Modal, ActivityIndicator, ScrollView,
   KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BorderRadius, Spacing } from '../../constants/theme';
-import { api, ApiBusiness, ApiService, ApiTicket } from '../../services/api';
+import { api, ApiBusiness, ApiService, ApiTicket, ApiStaff } from '../../services/api';
 
-type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'customers' | 'settings';
+type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'customers' | 'subscription' | 'settings';
 
 const LIGHT = {
   bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#f0f2f5', border: '#e2e8f0',
@@ -35,12 +35,14 @@ function readTheme(): boolean {
 }
 
 const NAV_ITEMS: { tab: Tab; icon: string; label: string }[] = [
-  { tab: 'home',      icon: '🏠', label: 'Home'       },
-  { tab: 'queue',     icon: '📋', label: 'Live Queue' },
-  { tab: 'walkin',    icon: '➕', label: 'Add Walk-in' },
-  { tab: 'services',  icon: '⚙️',  label: 'Services'   },
-  { tab: 'customers', icon: '👥', label: 'Customers'  },
-  { tab: 'settings',  icon: '🔧', label: 'Settings'   },
+  { tab: 'home',         icon: '🏠', label: 'Home'         },
+  { tab: 'queue',        icon: '📋', label: 'Live Queue'   },
+  { tab: 'walkin',       icon: '➕', label: 'Add Walk-in'  },
+  { tab: 'services',     icon: '⚙️',  label: 'Services'    },
+  { tab: 'staff',        icon: '👤', label: 'Staff'        },
+  { tab: 'customers',    icon: '📊', label: 'Analytics'    },
+  { tab: 'subscription', icon: '💳', label: 'Subscription' },
+  { tab: 'settings',     icon: '🔧', label: 'Settings'     },
 ];
 
 function timeAgo(iso: string): string {
@@ -116,20 +118,49 @@ export default function BusinessDashboard() {
   });
   const [hoursSaved, setHoursSaved] = useState(false);
 
+  // Staff (localStorage)
+  const [staff, setStaff] = useState<ApiStaff[]>([]);
+  const [newStaffName, setNewStaffName]   = useState('');
+  const [newStaffRole, setNewStaffRole]   = useState('');
+  const [newStaffPhone, setNewStaffPhone] = useState('');
+  const [newStaffPhoto, setNewStaffPhoto] = useState('');
+
+  // Subscription plan (localStorage)
+  const [plan, setPlan] = useState<'basic' | 'pro'>('basic');
+
+  // Payment form (mock Stripe)
+  const [payName, setPayName]       = useState('');
+  const [payCard, setPayCard]       = useState('');
+  const [payExpiry, setPayExpiry]   = useState('');
+  const [payCvv, setPayCvv]         = useState('');
+  const [payProcessing, setPayProcessing] = useState(false);
+  const [paySuccess, setPaySuccess] = useState(false);
+  const [payError, setPayError]     = useState('');
+
   // ── Load data on mount ──────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     async function init() {
       try {
-        const [{ business: biz }, { services: svcs }, { tickets: tix }] = await Promise.all([
+        const [
+          { business: biz },
+          { services: svcs },
+          { tickets: tix },
+          staffRes,
+          subRes,
+        ] = await Promise.all([
           api.getMyBusiness(),
           api.getServices(),
           api.getQueue(),
+          api.getStaff().catch(() => ({ staff: [] })),
+          api.getSubscription().catch(() => ({ plan: 'basic' as const })),
         ]);
         if (cancelled) return;
         setBusiness(biz);
         setServices(svcs);
         setTickets(tix);
+        setStaff(staffRes.staff);
+        setPlan(subRes.plan);
         if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
       } catch {
         if (!cancelled) router.replace('/');
@@ -242,10 +273,16 @@ export default function BusinessDashboard() {
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
+  const liveTickets    = tickets.filter(t => t.status !== 'Done');
+  const servedToday    = tickets.filter(t => t.status === 'Done');
   const waitingTickets = tickets.filter(t => t.status === 'Waiting');
   const calledTickets  = tickets.filter(t => t.status === 'Called');
   const avgWait = waitingTickets.length > 0
     ? Math.round(waitingTickets.reduce((s, t) => s + t.avgTime, 0) / waitingTickets.length) : 0;
+
+  // Tab visibility based on plan
+  const BASIC_TABS: Tab[] = ['home', 'services', 'subscription', 'settings'];
+  const visibleNavItems = plan === 'pro' ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.tab));
 
   function statusColor(status: ApiTicket['status']) {
     if (status === 'Called')  return '#10b981';
@@ -334,7 +371,7 @@ export default function BusinessDashboard() {
 
   // ── Home tab ───────────────────────────────────────────────────────────────
   function renderHome() {
-    const preview = tickets.slice(0, 3);
+    const preview = liveTickets.slice(0, 3);
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
         <View style={styles.statsRow}>
@@ -357,7 +394,7 @@ export default function BusinessDashboard() {
           </TouchableOpacity>
         </View>
 
-        {tickets.length === 0 ? (
+        {liveTickets.length === 0 ? (
           <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
             <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No customers in queue</Text>
           </View>
@@ -391,7 +428,7 @@ export default function BusinessDashboard() {
 
   // ── Queue tab ──────────────────────────────────────────────────────────────
   function renderQueue() {
-    if (tickets.length === 0) {
+    if (liveTickets.length === 0 && servedToday.length === 0) {
       return (
         <View style={styles.centered}>
           <Text style={styles.emptyIcon}>✅</Text>
@@ -401,13 +438,51 @@ export default function BusinessDashboard() {
       );
     }
     return (
-      <FlatList
-        data={tickets}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => <TicketCard item={item} />}
-        contentContainerStyle={styles.tabContent}
-        showsVerticalScrollIndicator={false}
-      />
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        {liveTickets.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>Live Queue</Text>
+              <View style={[styles.navBadge, { backgroundColor: '#2563eb' }]}>
+                <Text style={styles.navBadgeText}>{liveTickets.length}</Text>
+              </View>
+            </View>
+            {liveTickets.map(item => <TicketCard key={item.id} item={item} />)}
+          </>
+        )}
+
+        {servedToday.length > 0 && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>Served Today</Text>
+              <View style={[styles.navBadge, { backgroundColor: '#10b981' }]}>
+                <Text style={styles.navBadgeText}>{servedToday.length}</Text>
+              </View>
+            </View>
+            {servedToday.map(item => (
+              <View key={item.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: C.border, opacity: 0.7 }]}>
+                <View style={styles.ticketTop}>
+                  <View style={[styles.positionBadge, { backgroundColor: '#10b981' }]}>
+                    <Text style={styles.positionText}>✓</Text>
+                  </View>
+                  <View style={styles.customerInfo}>
+                    <Text style={[styles.customerName, { color: C.text }]}>{item.customerName}</Text>
+                    <Text style={[styles.customerPhone, { color: C.textMuted }]}>{item.phoneNumber}</Text>
+                  </View>
+                  <View style={[styles.statusPill, { backgroundColor: '#10b98122' }]}>
+                    <Text style={[styles.statusPillText, { color: '#10b981' }]}>Done</Text>
+                  </View>
+                </View>
+                <View style={styles.ticketMeta}>
+                  <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
+                  <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+                  <Text style={[styles.metaText, { color: C.textSub }]}>{timeAgo(item.updatedAt)}</Text>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+      </ScrollView>
     );
   }
 
@@ -628,6 +703,267 @@ export default function BusinessDashboard() {
     );
   }
 
+  // ── Staff tab ──────────────────────────────────────────────────────────────
+  function renderStaff() {
+    const maxStaff = plan === 'pro' ? Infinity : 3;
+    const atLimit = staff.length >= maxStaff;
+
+    async function addApiStaff() {
+      if (!newStaffName.trim()) return;
+      try {
+        const { staff: member } = await api.addStaff(
+          newStaffName.trim(), newStaffRole.trim() || 'Staff',
+          newStaffPhone.trim(), newStaffPhoto.trim(),
+        );
+        setStaff(prev => [...prev, member]);
+        setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+      } catch {}
+    }
+
+    async function removeApiStaff(id: string) {
+      try {
+        await api.deleteStaff(id);
+        setStaff(prev => prev.filter(s => s.id !== id));
+      } catch {}
+    }
+
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Staff Members</Text>
+          <Text style={[styles.sectionSub, { color: C.textMuted }]}>
+            Customers can choose a specific staff member when joining the queue.
+          </Text>
+
+          {plan === 'basic' && (
+            <View style={[styles.planBanner, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
+              <Text style={{ color: '#92400e', fontWeight: '600', fontSize: 13 }}>
+                Basic plan: up to 3 staff members. Upgrade to Pro for unlimited.
+              </Text>
+            </View>
+          )}
+
+          <View style={{ gap: 12, marginTop: 8 }}>
+            {staff.map(member => (
+              <View key={member.id} style={[styles.staffCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={[styles.staffAvatar, { backgroundColor: C.primary + '22' }]}>
+                  {member.photoUrl ? (
+                    <Image source={{ uri: member.photoUrl }} style={styles.staffAvatarImg} />
+                  ) : (
+                    <Text style={[styles.staffAvatarText, { color: C.primary }]}>
+                      {member.name.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.staffName, { color: C.text }]}>{member.name}</Text>
+                  <Text style={[styles.staffRole, { color: C.textMuted }]}>{member.role}</Text>
+                  {!!member.phone && <Text style={[styles.staffPhone, { color: C.textSub }]}>{member.phone}</Text>}
+                </View>
+                <TouchableOpacity onPress={() => removeApiStaff(member.id)} style={{ padding: 8 }}>
+                  <Text style={{ color: C.textMuted, fontSize: 18 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+
+          {atLimit && plan === 'basic' ? (
+            <TouchableOpacity style={[styles.addBtn, { marginTop: 16, backgroundColor: '#f59e0b' }]} onPress={() => setActiveTab('subscription')}>
+              <Text style={styles.addBtnText}>Upgrade to Pro for More Staff</Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border, marginTop: 16 }]}>
+              <Text style={[styles.settingsCardTitle, { color: C.text }]}>Add Staff Member</Text>
+              {[
+                { label: 'Name *', value: newStaffName, setter: setNewStaffName, placeholder: 'e.g. James Rivera' },
+                { label: 'Role', value: newStaffRole, setter: setNewStaffRole, placeholder: 'e.g. Barber, Doctor' },
+                { label: 'Phone (optional)', value: newStaffPhone, setter: setNewStaffPhone, placeholder: '(555) 000-0000' },
+                { label: 'Photo URL (optional)', value: newStaffPhoto, setter: setNewStaffPhoto, placeholder: 'https://...' },
+              ].map(({ label, value, setter, placeholder }) => (
+                <View key={label}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>{label}</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    value={value} onChangeText={setter}
+                    placeholder={placeholder} placeholderTextColor={C.placeholder}
+                  />
+                </View>
+              ))}
+              <TouchableOpacity
+                style={[styles.addBtn, { marginTop: 8 }, !newStaffName.trim() && styles.addBtnDisabled]}
+                onPress={addApiStaff}
+                disabled={!newStaffName.trim()}
+              >
+                <Text style={styles.addBtnText}>Add Staff Member</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ── Subscription tab ────────────────────────────────────────────────────────
+  function renderSubscription() {
+    async function selectPlan(p: 'basic' | 'pro') {
+      setPlan(p);
+      try { await api.updateSubscription(p); } catch {}
+    }
+
+    function handleSubscribe() {
+      if (!payName.trim() || payCard.replace(/\s/g, '').length < 4) {
+        setPayError('Please fill in all card details.');
+        return;
+      }
+      setPayProcessing(true);
+      setPayError('');
+      setTimeout(async () => {
+        await selectPlan('pro');
+        setPayProcessing(false);
+        setPaySuccess(true);
+      }, 1500);
+    }
+
+    const plans = [
+      {
+        key: 'basic' as const,
+        name: 'Basic',
+        price: 'Free',
+        color: '#6b7280',
+        features: [
+          '✅ Home dashboard',
+          '✅ Manage services',
+          '✅ Settings',
+          '✅ Customer portal + QR code',
+          '❌ Live queue management',
+          '❌ Add walk-in customers',
+          '❌ Staff management',
+          '❌ Analytics',
+          '❌ Calendar/appointment booking',
+        ],
+      },
+      {
+        key: 'pro' as const,
+        name: 'Pro',
+        price: '$20/mo',
+        color: '#2563eb',
+        features: [
+          '✅ Everything in Basic',
+          '✅ Live queue management',
+          '✅ Add walk-in customers',
+          '✅ Staff management (unlimited)',
+          '✅ Analytics dashboard',
+          '✅ Calendar/appointment booking',
+          '✅ SMS notifications',
+          '✅ Priority support',
+        ],
+      },
+    ];
+
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        <Text style={[styles.sectionTitle, { color: C.text }]}>Subscription Plan</Text>
+        <Text style={[styles.sectionSub, { color: C.textMuted }]}>
+          Current plan:{' '}
+          <Text style={{ fontWeight: '700', color: plan === 'pro' ? '#2563eb' : '#6b7280' }}>
+            {plan === 'pro' ? 'Pro — $20/mo' : 'Basic — Free'}
+          </Text>
+        </Text>
+
+        {paySuccess && (
+          <View style={[styles.successBanner, { marginBottom: 8 }]}>
+            <Text style={styles.successText}>🎉 You're now on Pro! All features unlocked.</Text>
+          </View>
+        )}
+
+        <View style={{ gap: 16, marginTop: 12 }}>
+          {plans.map(p => {
+            const isActive = plan === p.key;
+            return (
+              <View key={p.key} style={[styles.planCard, {
+                backgroundColor: C.surface, borderColor: isActive ? p.color : C.border,
+                borderWidth: isActive ? 2 : 1,
+              }]}>
+                <View style={styles.planCardHeader}>
+                  <View>
+                    <Text style={[styles.planName, { color: p.color }]}>{p.name}</Text>
+                    <Text style={[styles.planPrice, { color: C.text }]}>{p.price}</Text>
+                  </View>
+                  {isActive ? (
+                    <View style={[styles.planActiveBadge, { backgroundColor: p.color + '22', borderColor: p.color }]}>
+                      <Text style={[styles.planActiveBadgeText, { color: p.color }]}>Current Plan</Text>
+                    </View>
+                  ) : (
+                    p.key === 'basic' ? (
+                      <TouchableOpacity
+                        style={[styles.planSelectBtn, { backgroundColor: '#6b7280' }]}
+                        onPress={() => { selectPlan('basic'); setPaySuccess(false); }}
+                      >
+                        <Text style={styles.planSelectBtnText}>Downgrade</Text>
+                      </TouchableOpacity>
+                    ) : null
+                  )}
+                </View>
+                <View style={{ gap: 6, marginTop: 12 }}>
+                  {p.features.map(f => (
+                    <Text key={f} style={[styles.planFeature, { color: f.startsWith('❌') ? C.textMuted : C.text }]}>{f}</Text>
+                  ))}
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
+        {plan === 'basic' && (
+          <View style={[styles.planCard, { backgroundColor: C.surface, borderColor: '#2563eb', borderWidth: 1, marginTop: 8 }]}>
+            <Text style={[styles.settingsCardTitle, { color: C.text }]}>Upgrade to Pro — $20/mo</Text>
+            <Text style={[styles.sectionSub, { color: C.textMuted, marginBottom: 8 }]}>
+              Enter your payment info to unlock all Pro features.
+            </Text>
+
+            {!!payError && (
+              <View style={[styles.successBanner, { backgroundColor: '#fee2e2' }]}>
+                <Text style={[styles.successText, { color: '#dc2626' }]}>{payError}</Text>
+              </View>
+            )}
+
+            {[
+              { label: 'Name on Card', value: payName, setter: setPayName, placeholder: 'John Smith', keyboard: 'default' as const },
+              { label: 'Card Number', value: payCard, setter: setPayCard, placeholder: '1234 5678 9012 3456', keyboard: 'number-pad' as const },
+              { label: 'Expiry (MM/YY)', value: payExpiry, setter: setPayExpiry, placeholder: '12/28', keyboard: 'number-pad' as const },
+              { label: 'CVV', value: payCvv, setter: setPayCvv, placeholder: '123', keyboard: 'number-pad' as const },
+            ].map(({ label, value, setter, placeholder, keyboard }) => (
+              <View key={label}>
+                <Text style={[styles.fieldLabel, { color: C.textSub }]}>{label}</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  value={value} onChangeText={setter}
+                  placeholder={placeholder} placeholderTextColor={C.placeholder}
+                  keyboardType={keyboard}
+                  secureTextEntry={label === 'CVV'}
+                />
+              </View>
+            ))}
+
+            <TouchableOpacity
+              style={[styles.addBtn, { marginTop: 8, backgroundColor: '#2563eb' }, payProcessing && { opacity: 0.7 }]}
+              onPress={handleSubscribe}
+              disabled={payProcessing}
+            >
+              {payProcessing
+                ? <ActivityIndicator color="#fff" />
+                : <Text style={styles.addBtnText}>Subscribe to Pro — $20/mo</Text>}
+            </TouchableOpacity>
+
+            <Text style={[styles.sectionSub, { color: C.textMuted, textAlign: 'center', marginTop: 8, fontSize: 11 }]}>
+              🔒 Powered by Stripe · Cancel anytime
+            </Text>
+          </View>
+        )}
+      </ScrollView>
+    );
+  }
+
   // ── Settings tab ───────────────────────────────────────────────────────────
   function renderSettings() {
     const days = [
@@ -713,9 +1049,9 @@ export default function BusinessDashboard() {
           </View>
 
           <View style={styles.navItems}>
-            {NAV_ITEMS.map(({ tab, icon, label }) => {
+            {visibleNavItems.map(({ tab, icon, label }) => {
               const isActive = activeTab === tab;
-              const badge = tab === 'queue' ? tickets.length : 0;
+              const badge = tab === 'queue' ? liveTickets.length : 0;
               return (
                 <TouchableOpacity
                   key={tab}
@@ -753,24 +1089,28 @@ export default function BusinessDashboard() {
         <View style={[styles.main, { backgroundColor: C.bg }]}>
           <View style={[styles.topBar, { backgroundColor: C.topBar, borderBottomColor: C.border }]}>
             <Text style={[styles.topBarTitle, { color: C.text }]}>
-              {activeTab === 'home'      && 'Overview'}
-              {activeTab === 'queue'     && 'Live Queue'}
-              {activeTab === 'walkin'    && 'Add Walk-in'}
-              {activeTab === 'services'  && 'Manage Services'}
-              {activeTab === 'customers' && 'Customers'}
-              {activeTab === 'settings'  && 'Settings'}
+              {activeTab === 'home'         && 'Overview'}
+              {activeTab === 'queue'        && 'Live Queue'}
+              {activeTab === 'walkin'       && 'Add Walk-in'}
+              {activeTab === 'services'     && 'Manage Services'}
+              {activeTab === 'staff'        && 'Staff Members'}
+              {activeTab === 'customers'    && 'Analytics'}
+              {activeTab === 'subscription' && 'Subscription'}
+              {activeTab === 'settings'     && 'Settings'}
             </Text>
             <TouchableOpacity onPress={toggleTheme} style={{ padding: 6 }}>
               <Text style={{ fontSize: 18 }}>{isDark ? '☀️' : '🌙'}</Text>
             </TouchableOpacity>
           </View>
 
-          {activeTab === 'home'      && renderHome()}
-          {activeTab === 'queue'     && renderQueue()}
-          {activeTab === 'walkin'    && renderWalkIn()}
-          {activeTab === 'services'  && renderServices()}
-          {activeTab === 'customers' && renderCustomers()}
-          {activeTab === 'settings'  && renderSettings()}
+          {activeTab === 'home'         && renderHome()}
+          {activeTab === 'queue'        && renderQueue()}
+          {activeTab === 'walkin'       && renderWalkIn()}
+          {activeTab === 'services'     && renderServices()}
+          {activeTab === 'staff'        && renderStaff()}
+          {activeTab === 'customers'    && renderCustomers()}
+          {activeTab === 'subscription' && renderSubscription()}
+          {activeTab === 'settings'     && renderSettings()}
         </View>
 
         {/* ── Right sidebar — QR panel ────────────────────────── */}
@@ -1106,4 +1446,25 @@ const styles = StyleSheet.create({
   modalCancelText: { fontSize: 15, fontWeight: '600' },
   modalConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: BorderRadius.md, backgroundColor: '#0a7ea4', alignItems: 'center' },
   modalConfirmText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+
+  // Staff
+  planBanner: { borderWidth: 1, borderRadius: BorderRadius.md, padding: Spacing.md, marginBottom: 12 },
+  staffCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: BorderRadius.lg, padding: Spacing.md, gap: Spacing.md },
+  staffAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  staffAvatarImg: { width: 48, height: 48, borderRadius: 24 },
+  staffAvatarText: { fontSize: 20, fontWeight: '700' },
+  staffName: { fontSize: 15, fontWeight: '700' },
+  staffRole: { fontSize: 12, marginTop: 1 },
+  staffPhone: { fontSize: 12, marginTop: 1 },
+
+  // Subscription
+  planCard: { borderRadius: BorderRadius.xl, borderWidth: 1, padding: Spacing.lg },
+  planCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  planName: { fontSize: 20, fontWeight: '800' },
+  planPrice: { fontSize: 16, fontWeight: '600', marginTop: 2 },
+  planActiveBadge: { borderWidth: 1, borderRadius: BorderRadius.full, paddingHorizontal: 12, paddingVertical: 4 },
+  planActiveBadgeText: { fontSize: 12, fontWeight: '700' },
+  planSelectBtn: { borderRadius: BorderRadius.md, paddingHorizontal: 16, paddingVertical: 8 },
+  planSelectBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  planFeature: { fontSize: 13 },
 });

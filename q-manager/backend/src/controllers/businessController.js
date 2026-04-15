@@ -153,6 +153,87 @@ async function addWalkin(req, res, next) {
   }
 }
 
+async function getStaff(req, res, next) {
+  try {
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const staff = await businessService.getStaff(business.id);
+    res.json({ staff });
+  } catch (err) { next(err); }
+}
+
+async function addStaff(req, res, next) {
+  try {
+    const { name, role, phone, photoUrl } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const member = await businessService.addStaff(business.id, name, role, phone, photoUrl);
+    res.status(201).json({ staff: member });
+  } catch (err) { next(err); }
+}
+
+async function deleteStaff(req, res, next) {
+  try {
+    const { staffId } = req.params;
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const member = await businessService.deleteStaff(staffId, business.id);
+    if (!member) return res.status(404).json({ error: 'Staff not found' });
+    res.json({ staff: member });
+  } catch (err) { next(err); }
+}
+
+async function createAppointment(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const { serviceId, staffId, customerName, phoneNumber, date, time } = req.body;
+    if (!customerName || !phoneNumber || !date || !time)
+      return res.status(400).json({ error: 'customerName, phoneNumber, date, and time are required' });
+    const appointment = await businessService.createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time);
+    res.status(201).json({ appointment });
+  } catch (err) { next(err); }
+}
+
+async function getPublicAppointments(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ error: 'date query param is required' });
+    const slots = await businessService.getPublicAppointments(businessId, date);
+    res.json({ bookedSlots: slots });
+  } catch (err) { next(err); }
+}
+
+async function getMyAppointments(req, res, next) {
+  try {
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const appointments = await businessService.getAllAppointments(business.id);
+    res.json({ appointments });
+  } catch (err) { next(err); }
+}
+
+async function getSubscription(req, res, next) {
+  try {
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const sub = await businessService.getSubscription(business.id);
+    res.json({ plan: sub.plan });
+  } catch (err) { next(err); }
+}
+
+async function updateSubscription(req, res, next) {
+  try {
+    const { plan } = req.body;
+    if (!plan) return res.status(400).json({ error: 'plan is required' });
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const updated = await businessService.updateSubscription(business.id, plan);
+    res.json({ plan: updated.plan });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   getAllBusinesses,
   getPublicBusiness,
@@ -166,4 +247,12 @@ module.exports = {
   deleteService,
   getQueue,
   addWalkin,
+  getStaff,
+  addStaff,
+  deleteStaff,
+  createAppointment,
+  getPublicAppointments,
+  getMyAppointments,
+  getSubscription,
+  updateSubscription,
 };
