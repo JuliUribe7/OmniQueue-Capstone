@@ -55,15 +55,17 @@ CREATE TABLE IF NOT EXISTS "Business" (
 );
 
 -- Service table (belongs to a business)
-CREATE TABLE IF NOT EXISTS "Service" (
-  "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "businessId" TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
-  "name"       TEXT NOT NULL,
-  "avgTime"    INTEGER NOT NULL DEFAULT 15,
-  "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS "Business" (
+  "id"        TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "userId"    TEXT NOT NULL UNIQUE REFERENCES "user"("id") ON DELETE CASCADE,
+  "name"      TEXT NOT NULL,
+  "type"      TEXT,
+  "stripeCustomerId"   TEXT,
+  "subscriptionStatus" TEXT NOT NULL DEFAULT 'inactive',
+  "plan"      TEXT NOT NULL DEFAULT 'basic',
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
 -- Ticket table (queue entry)
 CREATE TABLE IF NOT EXISTS "Ticket" (
   "id"            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
