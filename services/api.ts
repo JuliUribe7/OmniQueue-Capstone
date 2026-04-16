@@ -142,6 +142,13 @@ export const api = {
   updateSubscription: (plan: 'basic' | 'pro'): Promise<{ plan: 'basic' | 'pro' }> =>
     apiFetch('/api/businesses/me/subscription', { method: 'PUT', body: JSON.stringify({ plan }) }),
 
+  // Stripe
+  createCheckoutSession: (businessName: string, businessId: string): Promise<{ url: string }> =>
+    apiFetch('/api/payments/create-checkout', {
+      method: 'POST',
+      body: JSON.stringify({ businessName, businessId }),
+    }),
+
   // Admin
   getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
     apiFetch('/api/admin/businesses'),
