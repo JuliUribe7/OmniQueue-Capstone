@@ -6,7 +6,7 @@ const db = require('../db');
 // Create checkout session for barbershop subscription
 router.post('/create-checkout', async (req, res) => {
   try {
-    const { businessName, email } = req.body;
+    const { businessName, email, businessId } = req.body;
 
     // Create a Stripe customer
     const customer = await stripe.customers.create({
@@ -25,7 +25,10 @@ router.post('/create-checkout', async (req, res) => {
           quantity: 1,
         },
       ],
-      success_url: `${process.env.FRONTEND_URL}/dashboard?success=true`,
+      metadata: {
+        businessId: businessId,
+      },
+      success_url: `${process.env.FRONTEND_URL}/${businessId}/dashboard?success=true`,
       cancel_url: `${process.env.FRONTEND_URL}/pricing?cancelled=true`,
     });
 
@@ -49,15 +52,15 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     await db.query(
-      `UPDATE "Service" SET "stripeCustomerId" = $1, "subscriptionStatus" = 'active' WHERE "id" = $2`,
-      [session.customer, session.metadata.serviceId]
+      `UPDATE "Business" SET "plan" = 'pro' WHERE "id" = $1`,
+      [session.metadata.businessId]
     );
   }
 
   if (event.type === 'customer.subscription.deleted') {
     const subscription = event.data.object;
     await db.query(
-      `UPDATE "Service" SET "subscriptionStatus" = 'inactive' WHERE "stripeCustomerId" = $1`,
+      `UPDATE "Business" SET "plan" = 'basic' WHERE "stripeCustomerId" = $1`,
       [subscription.customer]
     );
   }
