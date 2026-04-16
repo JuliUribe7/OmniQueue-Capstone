@@ -1,11 +1,16 @@
 const express = require('express');
 const router = express.Router();
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const db = require('../db');
+
+function getStripe() {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY is not set');
+  return require('stripe')(process.env.STRIPE_SECRET_KEY);
+}
 
 // Create checkout session for barbershop subscription
 router.post('/create-checkout', async (req, res) => {
   try {
+    const stripe = getStripe();
     const { businessName, email, businessId } = req.body;
 
     // Create a Stripe customer
@@ -40,6 +45,7 @@ router.post('/create-checkout', async (req, res) => {
 
 // Webhook - listens for Stripe events
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const stripe = getStripe();
   const sig = req.headers['stripe-signature'];
 
   let event;

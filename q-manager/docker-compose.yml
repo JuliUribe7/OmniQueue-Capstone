@@ -5,6 +5,12 @@ services:
       - "4000"          # internal only, NOT published to host
     environment:
       - DATABASE_URL=postgresql://omniman:${POSTGRES_PASSWORD}@db:5432/team3_db
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_PRICE_ID=${STRIPE_PRICE_ID}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
     depends_on:
       db:
         condition: service_healthy
@@ -13,7 +19,7 @@ services:
   frontend:
     build: ..          # Dockerfile is at repo root
     ports:
-      - "4003:80"       # 4003 is your team's assigned port
+      - "4003:80"       # 4003 is team 3 assigned port
     depends_on:
       - backend
     restart: unless-stopped
