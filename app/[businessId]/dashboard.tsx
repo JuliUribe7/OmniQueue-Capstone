@@ -128,14 +128,9 @@ export default function BusinessDashboard() {
   // Subscription plan (localStorage)
   const [plan, setPlan] = useState<'basic' | 'pro'>('basic');
 
-  // Payment form (mock Stripe)
-  const [payName, setPayName]       = useState('');
-  const [payCard, setPayCard]       = useState('');
-  const [payExpiry, setPayExpiry]   = useState('');
-  const [payCvv, setPayCvv]         = useState('');
-  const [payProcessing, setPayProcessing] = useState(false);
-  const [paySuccess, setPaySuccess] = useState(false);
-  const [payError, setPayError]     = useState('');
+  // Stripe checkout state
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError]     = useState('');
 
   // ── Load data on mount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -805,23 +800,22 @@ export default function BusinessDashboard() {
 
   // ── Subscription tab ────────────────────────────────────────────────────────
   function renderSubscription() {
-    async function selectPlan(p: 'basic' | 'pro') {
-      setPlan(p);
-      try { await api.updateSubscription(p); } catch {}
+    async function handleUpgrade() {
+      if (!business) return;
+      setCheckoutLoading(true);
+      setCheckoutError('');
+      try {
+        const { url } = await api.createCheckoutSession(business.name, businessId as string);
+        if (typeof window !== 'undefined') window.location.href = url;
+      } catch (e: any) {
+        setCheckoutError(e?.message ?? 'Could not start checkout. Please try again.');
+        setCheckoutLoading(false);
+      }
     }
 
-    function handleSubscribe() {
-      if (!payName.trim() || payCard.replace(/\s/g, '').length < 4) {
-        setPayError('Please fill in all card details.');
-        return;
-      }
-      setPayProcessing(true);
-      setPayError('');
-      setTimeout(async () => {
-        await selectPlan('pro');
-        setPayProcessing(false);
-        setPaySuccess(true);
-      }, 1500);
+    async function handleDowngrade() {
+      setPlan('basic');
+      try { await api.updateSubscription('basic'); } catch {}
     }
 
     const plans = [
@@ -870,12 +864,6 @@ export default function BusinessDashboard() {
           </Text>
         </Text>
 
-        {paySuccess && (
-          <View style={[styles.successBanner, { marginBottom: 8 }]}>
-            <Text style={styles.successText}>🎉 You're now on Pro! All features unlocked.</Text>
-          </View>
-        )}
-
         <View style={{ gap: 16, marginTop: 12 }}>
           {plans.map(p => {
             const isActive = plan === p.key;
@@ -897,7 +885,7 @@ export default function BusinessDashboard() {
                     p.key === 'basic' ? (
                       <TouchableOpacity
                         style={[styles.planSelectBtn, { backgroundColor: '#6b7280' }]}
-                        onPress={() => { selectPlan('basic'); setPaySuccess(false); }}
+                        onPress={handleDowngrade}
                       >
                         <Text style={styles.planSelectBtnText}>Downgrade</Text>
                       </TouchableOpacity>
@@ -917,42 +905,24 @@ export default function BusinessDashboard() {
         {plan === 'basic' && (
           <View style={[styles.planCard, { backgroundColor: C.surface, borderColor: '#2563eb', borderWidth: 1, marginTop: 8 }]}>
             <Text style={[styles.settingsCardTitle, { color: C.text }]}>Upgrade to Pro — $20/mo</Text>
-            <Text style={[styles.sectionSub, { color: C.textMuted, marginBottom: 8 }]}>
-              Enter your payment info to unlock all Pro features.
+            <Text style={[styles.sectionSub, { color: C.textMuted, marginBottom: 12 }]}>
+              Unlock live queue, walk-ins, staff management, analytics, and calendar booking.
             </Text>
 
-            {!!payError && (
-              <View style={[styles.successBanner, { backgroundColor: '#fee2e2' }]}>
-                <Text style={[styles.successText, { color: '#dc2626' }]}>{payError}</Text>
+            {!!checkoutError && (
+              <View style={[styles.successBanner, { backgroundColor: '#fee2e2', marginBottom: 8 }]}>
+                <Text style={[styles.successText, { color: '#dc2626' }]}>{checkoutError}</Text>
               </View>
             )}
 
-            {[
-              { label: 'Name on Card', value: payName, setter: setPayName, placeholder: 'John Smith', keyboard: 'default' as const },
-              { label: 'Card Number', value: payCard, setter: setPayCard, placeholder: '1234 5678 9012 3456', keyboard: 'number-pad' as const },
-              { label: 'Expiry (MM/YY)', value: payExpiry, setter: setPayExpiry, placeholder: '12/28', keyboard: 'number-pad' as const },
-              { label: 'CVV', value: payCvv, setter: setPayCvv, placeholder: '123', keyboard: 'number-pad' as const },
-            ].map(({ label, value, setter, placeholder, keyboard }) => (
-              <View key={label}>
-                <Text style={[styles.fieldLabel, { color: C.textSub }]}>{label}</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
-                  value={value} onChangeText={setter}
-                  placeholder={placeholder} placeholderTextColor={C.placeholder}
-                  keyboardType={keyboard}
-                  secureTextEntry={label === 'CVV'}
-                />
-              </View>
-            ))}
-
             <TouchableOpacity
-              style={[styles.addBtn, { marginTop: 8, backgroundColor: '#2563eb' }, payProcessing && { opacity: 0.7 }]}
-              onPress={handleSubscribe}
-              disabled={payProcessing}
+              style={[styles.addBtn, { backgroundColor: '#2563eb' }, checkoutLoading && { opacity: 0.7 }]}
+              onPress={handleUpgrade}
+              disabled={checkoutLoading}
             >
-              {payProcessing
+              {checkoutLoading
                 ? <ActivityIndicator color="#fff" />
-                : <Text style={styles.addBtnText}>Subscribe to Pro — $20/mo</Text>}
+                : <Text style={styles.addBtnText}>Upgrade to Pro — $20/mo</Text>}
             </TouchableOpacity>
 
             <Text style={[styles.sectionSub, { color: C.textMuted, textAlign: 'center', marginTop: 8, fontSize: 11 }]}>
