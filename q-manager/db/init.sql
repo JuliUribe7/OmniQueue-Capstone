@@ -50,11 +50,12 @@ CREATE TABLE IF NOT EXISTS "Business" (
   "userId"             TEXT NOT NULL UNIQUE REFERENCES "user"("id") ON DELETE CASCADE,
   "name"               TEXT NOT NULL,
   "type"               TEXT,
-  "stripeCustomerId"   TEXT,
-  "subscriptionStatus" TEXT NOT NULL DEFAULT 'inactive',
-  "plan"               TEXT NOT NULL DEFAULT 'basic',
-  "createdAt"          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  "updatedAt"          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  "stripeCustomerId"    TEXT,
+  "subscriptionStatus"  TEXT NOT NULL DEFAULT 'inactive',
+  "plan"                TEXT NOT NULL DEFAULT 'basic',
+  "notificationChannel" TEXT NOT NULL DEFAULT 'sms',
+  "createdAt"           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt"           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Service table (belongs to a business)
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS "Ticket" (
   "status"        TEXT NOT NULL DEFAULT 'Waiting',
   "serviceId"     TEXT NOT NULL REFERENCES "Service"("id") ON DELETE CASCADE,
   "customerName"  TEXT,
+  "customerEmail" TEXT,
   "customerToken" TEXT,
   "phoneNumber"   TEXT,
   "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -97,9 +99,10 @@ CREATE TABLE IF NOT EXISTS "Appointment" (
   "businessId"   TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
   "serviceId"    TEXT REFERENCES "Service"("id"),
   "staffId"      TEXT REFERENCES "Staff"("id"),
-  "customerName" TEXT NOT NULL,
-  "phoneNumber"  TEXT NOT NULL,
-  "date"         TEXT NOT NULL,
+  "customerName"  TEXT NOT NULL,
+  "customerEmail" TEXT,
+  "phoneNumber"   TEXT NOT NULL,
+  "date"          TEXT NOT NULL,
   "time"         TEXT NOT NULL,
   "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

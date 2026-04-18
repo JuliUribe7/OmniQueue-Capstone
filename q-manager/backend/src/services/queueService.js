@@ -1,9 +1,8 @@
 const { pool, query } = require('../db');
 const eventService = require('./eventService');
-let telnyx;
-try { telnyx = require('./telnyxService'); } catch (e) { telnyx = null; }
+const notificationService = require('./notificationService');
 
-async function joinQueue(serviceId, customerToken, phoneNumber, customerName) {
+async function joinQueue(serviceId, customerToken, phoneNumber, customerName, customerEmail, business) {
   // Look up the service
   const serviceRes = await query(
     'SELECT * FROM "Service" WHERE "id" = $1',
@@ -26,10 +25,10 @@ async function joinQueue(serviceId, customerToken, phoneNumber, customerName) {
 
     const ticketRes = await client.query(
       `INSERT INTO "Ticket"
-         ("position", "status", "serviceId", "customerToken", "phoneNumber", "customerName", "createdAt", "updatedAt")
-       VALUES ($1, 'Waiting', $2, $3, $4, $5, NOW(), NOW())
+         ("position", "status", "serviceId", "customerToken", "phoneNumber", "customerName", "customerEmail", "createdAt", "updatedAt")
+       VALUES ($1, 'Waiting', $2, $3, $4, $5, $6, NOW(), NOW())
        RETURNING *`,
-      [position, serviceId, customerToken, phoneNumber, customerName || null],
+      [position, serviceId, customerToken, phoneNumber, customerName || null, customerEmail || null],
     );
     ticket = ticketRes.rows[0];
 
@@ -49,12 +48,22 @@ async function joinQueue(serviceId, customerToken, phoneNumber, customerName) {
     console.error('Failed to create join event', e);
   }
 
-  // Send SMS if configured and phoneNumber present
-  if (phoneNumber && telnyx && process.env.TELNYX_API_KEY) {
-    const msg = `You've joined ${service.name}. Your position: ${ticket.position}`;
-    telnyx.sendSMS(phoneNumber, msg).catch((err) => {
-      console.error('Telnyx send failed', err);
-    });
+  // Send notification based on business channel preference
+  if (business && (phoneNumber || customerEmail)) {
+    const smsText = `You've joined ${service.name}. Your position: #${ticket.position}. Estimated wait: ${service.avgTime * ticket.position} min.`;
+    notificationService.sendNotification(
+      business,
+      { phone: phoneNumber, email: customerEmail, name: customerName },
+      {
+        sms: smsText,
+        subject: `Queue Confirmation – ${service.name}`,
+        html: `<p>Hi ${customerName || 'there'},</p>
+               <p>You've joined the queue for <strong>${service.name}</strong>.</p>
+               <p>Your position: <strong>#${ticket.position}</strong><br>
+               Estimated wait: <strong>${service.avgTime * ticket.position} min</strong></p>
+               <p>Thanks for using OmniQueue!</p>`,
+      },
+    ).catch((err) => console.error('Notification failed:', err.message));
   }
 
   return ticket;

@@ -34,11 +34,12 @@ async function getPublicBusiness(req, res, next) {
 async function joinQueue(req, res, next) {
   try {
     const { businessId } = req.params;
-    const { customerName, phoneNumber, serviceId } = req.body;
+    const { customerName, phoneNumber, customerEmail, serviceId } = req.body;
     if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
     const { v4: uuidv4 } = require('uuid');
     const token = uuidv4();
-    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName);
+    const business = await businessService.getBusinessById(businessId);
+    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName, customerEmail, business);
     res.status(201).json({ ticket, token });
   } catch (err) {
     next(err);
@@ -70,8 +71,8 @@ async function getMyBusiness(req, res, next) {
 
 async function updateMyBusiness(req, res, next) {
   try {
-    const { name, type } = req.body;
-    const business = await businessService.updateBusiness(req.user.id, name, type);
+    const { name, type, notificationChannel } = req.body;
+    const business = await businessService.updateBusiness(req.user.id, name, type, notificationChannel);
     if (!business) return res.status(404).json({ error: 'No business found' });
     res.json({ business });
   } catch (err) {
@@ -143,10 +144,11 @@ async function getQueue(req, res, next) {
 
 async function addWalkin(req, res, next) {
   try {
-    const { customerName, phoneNumber, serviceId } = req.body;
+    const { customerName, phoneNumber, customerEmail, serviceId } = req.body;
     if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
     const token = uuidv4();
-    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName);
+    const business = await businessService.getBusinessByUser(req.user.id);
+    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName, customerEmail, business);
     res.status(201).json({ ticket });
   } catch (err) {
     next(err);
@@ -187,10 +189,10 @@ async function deleteStaff(req, res, next) {
 async function createAppointment(req, res, next) {
   try {
     const { businessId } = req.params;
-    const { serviceId, staffId, customerName, phoneNumber, date, time } = req.body;
+    const { serviceId, staffId, customerName, phoneNumber, customerEmail, date, time } = req.body;
     if (!customerName || !phoneNumber || !date || !time)
       return res.status(400).json({ error: 'customerName, phoneNumber, date, and time are required' });
-    const appointment = await businessService.createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time);
+    const appointment = await businessService.createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time, customerEmail);
     res.status(201).json({ appointment });
   } catch (err) { next(err); }
 }

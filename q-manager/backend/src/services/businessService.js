@@ -17,11 +17,23 @@ async function getBusinessByUser(userId) {
   return res.rows[0] || null;
 }
 
-async function updateBusiness(userId, name, type) {
+async function getBusinessById(businessId) {
   const res = await query(
-    `UPDATE "Business" SET "name" = $1, "type" = $2, "updatedAt" = NOW()
-     WHERE "userId" = $3 RETURNING *`,
-    [name, type, userId],
+    'SELECT * FROM "Business" WHERE "id" = $1',
+    [businessId],
+  );
+  return res.rows[0] || null;
+}
+
+async function updateBusiness(userId, name, type, notificationChannel) {
+  const res = await query(
+    `UPDATE "Business"
+     SET "name" = COALESCE($1, "name"),
+         "type" = COALESCE($2, "type"),
+         "notificationChannel" = COALESCE($3, "notificationChannel"),
+         "updatedAt" = NOW()
+     WHERE "userId" = $4 RETURNING *`,
+    [name || null, type || null, notificationChannel || null, userId],
   );
   return res.rows[0] || null;
 }
@@ -97,11 +109,11 @@ async function deleteStaff(staffId, businessId) {
   return res.rows[0] || null;
 }
 
-async function createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time) {
+async function createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time, customerEmail) {
   const res = await query(
-    `INSERT INTO "Appointment" ("businessId", "serviceId", "staffId", "customerName", "phoneNumber", "date", "time")
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [businessId, serviceId || null, staffId || null, customerName, phoneNumber, date, time],
+    `INSERT INTO "Appointment" ("businessId", "serviceId", "staffId", "customerName", "phoneNumber", "customerEmail", "date", "time")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [businessId, serviceId || null, staffId || null, customerName, phoneNumber, customerEmail || null, date, time],
   );
   return res.rows[0];
 }
@@ -164,6 +176,7 @@ async function getAllBusinessesWithQueues() {
 module.exports = {
   createBusiness,
   getBusinessByUser,
+  getBusinessById,
   updateBusiness,
   getServices,
   addService,
