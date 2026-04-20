@@ -73,6 +73,7 @@ export default function CustomerPortal() {
   // Join queue state
   const [name, setName]           = useState('');
   const [phone, setPhone]         = useState('');
+  const [email, setEmail]         = useState('');
   const [serviceId, setServiceId] = useState('');
   const [staffId, setStaffId]     = useState('any');
   const [joining, setJoining]     = useState(false);
@@ -142,7 +143,7 @@ export default function CustomerPortal() {
     setJoinError('');
     setJoining(true);
     try {
-      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id);
+      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id, email.trim());
       router.push(`/${businessId}/waiting?token=${token}`);
     } catch (e: any) {
       setJoinError(e?.message ?? 'Could not join queue. Please try again.');
@@ -299,6 +300,10 @@ export default function CustomerPortal() {
               <Text style={styles.fieldLabel}>Phone Number</Text>
               <TextInput style={styles.input} value={phone} onChangeText={setPhone}
                 placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+
+              <Text style={styles.fieldLabel}>Email (optional)</Text>
+              <TextInput style={styles.input} value={email} onChangeText={setEmail}
+                placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
               <Text style={styles.fieldHint}>We'll notify you when it's your turn.</Text>
 
               <Text style={styles.fieldLabel}>Choose a Service</Text>

@@ -117,6 +117,8 @@ export default function BusinessDashboard() {
     sat: '10:00 AM – 4:00 PM', sun: 'Closed',
   });
   const [hoursSaved, setHoursSaved] = useState(false);
+  const [notificationChannel, setNotificationChannel] = useState<'sms' | 'email' | 'both'>('sms');
+  const [notifSaved, setNotifSaved] = useState(false);
 
   // Staff (localStorage)
   const [staff, setStaff] = useState<ApiStaff[]>([]);
@@ -999,6 +1001,58 @@ export default function BusinessDashboard() {
             onPress={() => { setHoursSaved(true); setTimeout(() => setHoursSaved(false), 2500); }}
           >
             <Text style={styles.addBtnText}>Save Hours</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Notification Channel */}
+        <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.settingsCardTitle, { color: C.text }]}>Customer Notifications</Text>
+          <Text style={[styles.settingsCardSub, { color: C.textMuted }]}>
+            Choose how customers get notified when it's their turn.
+          </Text>
+
+          {notifSaved && (
+            <View style={[styles.successBanner, { marginTop: 12 }]}>
+              <Text style={styles.successText}>✅ Notification preference saved</Text>
+            </View>
+          )}
+
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+            {([
+              { key: 'sms',   label: '📱 SMS Only' },
+              { key: 'email', label: '✉️ Email Only' },
+              { key: 'both',  label: '📲 Both' },
+            ] as { key: 'sms' | 'email' | 'both'; label: string }[]).map(({ key, label }) => (
+              <TouchableOpacity
+                key={key}
+                style={{
+                  paddingVertical: 10, paddingHorizontal: 16,
+                  borderRadius: 10, borderWidth: 1.5,
+                  borderColor: notificationChannel === key ? '#2563eb' : C.border,
+                  backgroundColor: notificationChannel === key ? '#eff6ff' : C.surfaceAlt,
+                }}
+                onPress={() => setNotificationChannel(key)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: notificationChannel === key ? '#2563eb' : C.textSub }}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <TouchableOpacity
+            style={[styles.saveServicesBtn, { marginTop: 16 }]}
+            onPress={async () => {
+              if (!business) return;
+              try {
+                await api.updateMyBusiness(business.name, business.type, notificationChannel);
+                setNotifSaved(true);
+                setTimeout(() => setNotifSaved(false), 2500);
+              } catch {}
+            }}
+          >
+            <Text style={styles.addBtnText}>Save Notification Preference</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
