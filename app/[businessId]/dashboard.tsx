@@ -156,7 +156,7 @@ export default function BusinessDashboard() {
           api.getServices(),
           api.getQueue(),
           api.getStaff().catch(() => ({ staff: [] })),
-          api.getSubscription().catch(() => ({ plan: 'pro' as const })),
+          Promise.resolve({ plan: 'pro' as const }),
           api.getMyAppointments().catch(() => ({ appointments: [] })),
         ]);
         if (cancelled) return;
@@ -164,7 +164,7 @@ export default function BusinessDashboard() {
         setServices(svcs);
         setTickets(tix);
         setStaff(staffRes.staff);
-        setPlan(subRes.plan);
+        setPlan('pro'); // hardcoded for testing — switch back to subRes.plan when Stripe is ready
         setAppointments(apptRes.appointments);
         if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
       } catch {
