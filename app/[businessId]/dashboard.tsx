@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BorderRadius, Spacing } from '../../constants/theme';
 import { api, ApiBusiness, ApiService, ApiTicket, ApiStaff } from '../../services/api';
 
-type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'customers' | 'subscription' | 'settings';
+type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'appointments' | 'customers' | 'subscription' | 'settings';
 
 const LIGHT = {
   bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#f0f2f5', border: '#e2e8f0',
@@ -40,6 +40,7 @@ const NAV_ITEMS: { tab: Tab; icon: string; label: string }[] = [
   { tab: 'walkin',       icon: '➕', label: 'Add Walk-in'  },
   { tab: 'services',     icon: '⚙️',  label: 'Services'    },
   { tab: 'staff',        icon: '👤', label: 'Staff'        },
+  { tab: 'appointments', icon: '📅', label: 'Appointments' },
   { tab: 'customers',    icon: '📊', label: 'Analytics'    },
   { tab: 'subscription', icon: '💳', label: 'Subscription' },
   { tab: 'settings',     icon: '🔧', label: 'Settings'     },
@@ -127,7 +128,11 @@ export default function BusinessDashboard() {
   const [newStaffPhone, setNewStaffPhone] = useState('');
   const [newStaffPhoto, setNewStaffPhoto] = useState('');
 
-  // Subscription plan (localStorage)
+  // Appointments
+  const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
+  const [apptView, setApptView] = useState<'today' | 'week'>('today');
+
+  // Subscription plan
   const [plan, setPlan] = useState<'basic' | 'pro'>('basic');
 
   // Stripe checkout state
@@ -145,12 +150,14 @@ export default function BusinessDashboard() {
           { tickets: tix },
           staffRes,
           subRes,
+          apptRes,
         ] = await Promise.all([
           api.getMyBusiness(),
           api.getServices(),
           api.getQueue(),
           api.getStaff().catch(() => ({ staff: [] })),
           api.getSubscription().catch(() => ({ plan: 'basic' as const })),
+          api.getMyAppointments().catch(() => ({ appointments: [] })),
         ]);
         if (cancelled) return;
         setBusiness(biz);
@@ -158,6 +165,7 @@ export default function BusinessDashboard() {
         setTickets(tix);
         setStaff(staffRes.staff);
         setPlan(subRes.plan);
+        setAppointments(apptRes.appointments);
         if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
       } catch {
         if (!cancelled) router.replace('/');
@@ -403,21 +411,6 @@ export default function BusinessDashboard() {
           ))
         )}
 
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: C.text }]}>By Service</Text>
-        </View>
-        {services.map(service => {
-          const count = tickets.filter(t => t.serviceId === service.id).length;
-          return (
-            <View key={service.id} style={[styles.serviceRow, { backgroundColor: C.surface }]}>
-              <Text style={[styles.serviceRowName, { color: C.text }]}>{service.name}</Text>
-              <View style={styles.serviceRowRight}>
-                <Text style={styles.serviceRowCount}>{count} in line</Text>
-                <Text style={[styles.serviceRowTime, { color: C.textMuted }]}>~{service.avgTime} min/person</Text>
-              </View>
-            </View>
-          );
-        })}
 
       </ScrollView>
     );
@@ -936,6 +929,97 @@ export default function BusinessDashboard() {
     );
   }
 
+  // ── Appointments tab ───────────────────────────────────────────────────────
+  function renderAppointments() {
+    const todayKey = new Date().toISOString().split('T')[0];
+    const weekStart = new Date();
+    weekStart.setHours(0, 0, 0, 0);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 7);
+
+    const filtered = apptView === 'today'
+      ? appointments.filter(a => a.date === todayKey)
+      : appointments.filter(a => {
+          const d = new Date(a.date);
+          return d >= weekStart && d <= weekEnd;
+        });
+
+    const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+    function formatTime(t: string) {
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+    }
+
+    function formatDate(d: string) {
+      return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        {/* Today / This Week toggle */}
+        <View style={{ flexDirection: 'row', backgroundColor: C.surfaceAlt, borderRadius: 10, padding: 4, marginBottom: 8 }}>
+          {(['today', 'week'] as const).map(v => (
+            <TouchableOpacity
+              key={v}
+              style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center',
+                backgroundColor: apptView === v ? C.surface : 'transparent' }}
+              onPress={() => setApptView(v)}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '600', color: apptView === v ? C.text : C.textMuted }}>
+                {v === 'today' ? 'Today' : 'This Week'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={[styles.sectionSub, { color: C.textMuted }]}>
+          {sorted.length} appointment{sorted.length !== 1 ? 's' : ''} {apptView === 'today' ? 'today' : 'this week'}
+        </Text>
+
+        {sorted.length === 0 ? (
+          <View style={[styles.emptyPreview, { backgroundColor: C.surface, marginTop: 12 }]}>
+            <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>
+              No appointments {apptView === 'today' ? 'today' : 'this week'}
+            </Text>
+          </View>
+        ) : (
+          sorted.map(appt => {
+            const staffMember = staff.find(s => s.id === appt.staffId);
+            const service = services.find(s => s.id === appt.serviceId);
+            return (
+              <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                <View style={styles.apptTimeCol}>
+                  <Text style={[styles.apptTime, { color: C.primary }]}>{formatTime(appt.time)}</Text>
+                  {apptView === 'week' && (
+                    <Text style={[styles.apptDate, { color: C.textMuted }]}>{formatDate(appt.date)}</Text>
+                  )}
+                </View>
+                <View style={styles.apptInfo}>
+                  <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
+                  <Text style={[styles.apptService, { color: C.textSub }]}>{service?.name ?? 'Service'}</Text>
+                  {staffMember && (
+                    <Text style={[styles.apptStaff, { color: C.textMuted }]}>with {staffMember.name}</Text>
+                  )}
+                </View>
+                <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                  {appt.phoneNumber ? (
+                    <Text style={[styles.apptPhone, { color: C.textMuted }]}>{appt.phoneNumber}</Text>
+                  ) : null}
+                  <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </ScrollView>
+    );
+  }
+
   // ── Settings tab ───────────────────────────────────────────────────────────
   function renderSettings() {
     const days = [
@@ -1118,12 +1202,18 @@ export default function BusinessDashboard() {
               {activeTab === 'walkin'       && 'Add Walk-in'}
               {activeTab === 'services'     && 'Manage Services'}
               {activeTab === 'staff'        && 'Staff Members'}
+              {activeTab === 'appointments' && 'Appointments'}
               {activeTab === 'customers'    && 'Analytics'}
               {activeTab === 'subscription' && 'Subscription'}
               {activeTab === 'settings'     && 'Settings'}
             </Text>
             <TouchableOpacity onPress={toggleTheme} style={{ padding: 6 }}>
-              <Text style={{ fontSize: 18 }}>{isDark ? '☀️' : '🌙'}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 12, fontWeight: '500', color: C.textMuted }}>{isDark ? 'Light' : 'Dark'}</Text>
+                <View style={{ width: 36, height: 20, borderRadius: 10, backgroundColor: isDark ? '#2563eb' : '#d1d5db', padding: 2, justifyContent: 'center' }}>
+                  <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: '#fff', transform: [{ translateX: isDark ? 16 : 0 }] }} />
+                </View>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -1132,6 +1222,7 @@ export default function BusinessDashboard() {
           {activeTab === 'walkin'       && renderWalkIn()}
           {activeTab === 'services'     && renderServices()}
           {activeTab === 'staff'        && renderStaff()}
+          {activeTab === 'appointments' && renderAppointments()}
           {activeTab === 'customers'    && renderCustomers()}
           {activeTab === 'subscription' && renderSubscription()}
           {activeTab === 'settings'     && renderSettings()}
@@ -1491,4 +1582,17 @@ const styles = StyleSheet.create({
   planSelectBtn: { borderRadius: BorderRadius.md, paddingHorizontal: 16, paddingVertical: 8 },
   planSelectBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   planFeature: { fontSize: 13 },
+
+  apptCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    borderRadius: 12, padding: 14, borderWidth: 1,
+  },
+  apptTimeCol: { alignItems: 'center', minWidth: 56 },
+  apptTime: { fontSize: 14, fontWeight: '700' },
+  apptDate: { fontSize: 11, marginTop: 2 },
+  apptInfo: { flex: 1, gap: 2 },
+  apptName: { fontSize: 14, fontWeight: '600' },
+  apptService: { fontSize: 12 },
+  apptStaff: { fontSize: 11 },
+  apptPhone: { fontSize: 11 },
 });
