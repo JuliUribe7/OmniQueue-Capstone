@@ -133,7 +133,7 @@ export default function BusinessDashboard() {
   const [apptView, setApptView] = useState<'today' | 'week'>('today');
 
   // Subscription plan
-  const [plan, setPlan] = useState<'basic' | 'pro'>('basic');
+  const [plan, setPlan] = useState<'basic' | 'pro'>('pro');
 
   // Stripe checkout state
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -156,7 +156,7 @@ export default function BusinessDashboard() {
           api.getServices(),
           api.getQueue(),
           api.getStaff().catch(() => ({ staff: [] })),
-          api.getSubscription().catch(() => ({ plan: 'basic' as const })),
+          api.getSubscription().catch(() => ({ plan: 'pro' as const })),
           api.getMyAppointments().catch(() => ({ appointments: [] })),
         ]);
         if (cancelled) return;
