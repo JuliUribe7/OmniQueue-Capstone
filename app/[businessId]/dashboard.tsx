@@ -286,7 +286,7 @@ export default function BusinessDashboard() {
     ? Math.round(waitingTickets.reduce((s, t) => s + t.avgTime, 0) / waitingTickets.length) : 0;
 
   // Tab visibility based on plan
-  const BASIC_TABS: Tab[] = ['home', 'services', 'subscription', 'settings'];
+  const BASIC_TABS: Tab[] = ['home', 'services', 'appointments', 'subscription', 'settings'];
   const visibleNavItems = plan === 'pro' ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.tab));
 
   function statusColor(status: ApiTicket['status']) {
@@ -411,6 +411,62 @@ export default function BusinessDashboard() {
           ))
         )}
 
+        {/* Today's Appointments preview */}
+        {(() => {
+          const todayKey = new Date().toISOString().split('T')[0];
+          const todayAppts = appointments
+            .filter(a => a.date === todayKey)
+            .sort((a, b) => a.time.localeCompare(b.time))
+            .slice(0, 3);
+
+          function fmtTime(t: string) {
+            const [h, m] = t.split(':').map(Number);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+            return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+          }
+
+          return (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: C.text }]}>Today's Appointments</Text>
+                <TouchableOpacity onPress={() => setActiveTab('appointments')}>
+                  <Text style={styles.sectionLink}>View All →</Text>
+                </TouchableOpacity>
+              </View>
+
+              {todayAppts.length === 0 ? (
+                <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
+                  <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No appointments today</Text>
+                </View>
+              ) : (
+                todayAppts.map(appt => {
+                  const svc = services.find(s => s.id === appt.serviceId);
+                  const staffMember = staff.find(s => s.id === appt.staffId);
+                  return (
+                    <TouchableOpacity key={appt.id} onPress={() => setActiveTab('appointments')} activeOpacity={0.8}>
+                      <View style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                        <View style={styles.apptTimeCol}>
+                          <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
+                        </View>
+                        <View style={styles.apptInfo}>
+                          <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
+                          <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
+                          {staffMember && (
+                            <Text style={[styles.apptStaff, { color: C.textMuted }]}>with {staffMember.name}</Text>
+                          )}
+                        </View>
+                        <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </>
+          );
+        })()}
 
       </ScrollView>
     );
