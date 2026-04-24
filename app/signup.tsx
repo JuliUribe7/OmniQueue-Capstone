@@ -105,8 +105,11 @@ export default function SignupPage() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.back, { color: C.primary }]}>← Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleTheme} style={styles.themeBtn}>
-            <Text style={styles.themeBtnText}>{isDark ? '☀️' : '🌙'}</Text>
+          <TouchableOpacity onPress={toggleTheme} style={styles.themeToggleWrap} activeOpacity={0.8}>
+            <Text style={[styles.themeLabel, { color: C.textSub }]}>{isDark ? 'Light' : 'Dark'}</Text>
+            <View style={[styles.toggleTrack, { backgroundColor: isDark ? '#2563eb' : '#d1d5db' }]}>
+              <View style={[styles.toggleThumb, { transform: [{ translateX: isDark ? 16 : 0 }] }]} />
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -172,7 +175,7 @@ export default function SignupPage() {
               autoComplete="new-password"
             />
             <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowPass(v => !v)}>
-              <Text style={styles.eyeIcon}>{showPass ? '🙈' : '👁️'}</Text>
+              <Text style={[styles.eyeText, { color: C.primary }]}>{showPass ? 'Hide' : 'Show'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -189,7 +192,7 @@ export default function SignupPage() {
               autoComplete="new-password"
             />
             <TouchableOpacity style={[styles.eyeBtn, { borderColor: C.inputBorder, backgroundColor: C.inputBg }]} onPress={() => setShowConfirm(v => !v)}>
-              <Text style={styles.eyeIcon}>{showConfirm ? '🙈' : '👁️'}</Text>
+              <Text style={[styles.eyeText, { color: C.primary }]}>{showConfirm ? 'Hide' : 'Show'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -229,12 +232,14 @@ const styles = StyleSheet.create({
 
   topRow: { width: '100%', maxWidth: 420, marginBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   back: { color: '#2563eb', fontSize: 15, fontWeight: '600' },
-  themeBtn: { padding: 6 },
-  themeBtnText: { fontSize: 18 },
+  themeToggleWrap: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  themeLabel: { fontSize: 13, fontWeight: '500' },
+  toggleTrack: { width: 40, height: 22, borderRadius: 11, padding: 2, justifyContent: 'center' },
+  toggleThumb: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#ffffff' },
   passwordRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   passwordInput: { flex: 1, marginBottom: 0 },
   eyeBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'center', alignItems: 'center' },
-  eyeIcon: { fontSize: 16 },
+  eyeText: { fontSize: 13, fontWeight: '600' },
 
   header: { alignItems: 'center', marginBottom: 28, width: '100%', maxWidth: 420 },
   title: { fontSize: 26, fontWeight: '800', color: '#fff' },

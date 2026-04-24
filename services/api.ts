@@ -83,8 +83,8 @@ export const api = {
     apiFetch('/api/businesses', { method: 'POST', body: JSON.stringify({ name, type }) }),
   getMyBusiness: (): Promise<{ business: ApiBusiness }> =>
     apiFetch('/api/businesses/me'),
-  updateMyBusiness: (name: string, type: string) =>
-    apiFetch('/api/businesses/me', { method: 'PUT', body: JSON.stringify({ name, type }) }),
+  updateMyBusiness: (name: string, type: string, notificationChannel?: string) =>
+    apiFetch('/api/businesses/me', { method: 'PUT', body: JSON.stringify({ name, type, notificationChannel }) }),
 
   // Services
   getServices: (): Promise<{ services: ApiService[] }> =>
@@ -156,10 +156,10 @@ export const api = {
   // Public (customer-facing, no auth)
   getPublicBusiness: (businessId: string): Promise<{ business: { id: string; name: string; type: string; services: { id: string; name: string; avgTime: number }[] } }> =>
     apiFetch(`/api/businesses/${businessId}/public`),
-  joinQueue: (businessId: string, customerName: string, phoneNumber: string, serviceId: string): Promise<{ ticket: ApiTicket; token: string }> =>
+  joinQueue: (businessId: string, customerName: string, phoneNumber: string, serviceId: string, customerEmail?: string): Promise<{ ticket: ApiTicket; token: string }> =>
     apiFetch(`/api/businesses/${businessId}/queue/join`, {
       method: 'POST',
-      body: JSON.stringify({ customerName, phoneNumber, serviceId }),
+      body: JSON.stringify({ customerName, phoneNumber, serviceId, customerEmail }),
     }),
   getTicketByToken: (token: string): Promise<{ ticket: ApiTicket }> =>
     apiFetch(`/api/entries/${token}`),
