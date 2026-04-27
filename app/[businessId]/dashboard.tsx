@@ -683,68 +683,178 @@ export default function BusinessDashboard() {
     );
   }
 
-  // ── Customers tab ──────────────────────────────────────────────────────────
+  // ── Analytics tab ─────────────────────────────────────────────────────────
   function renderCustomers() {
-    // Deduplicate by phone number — shows unique customers currently in queue
-    const seen = new Set<string>();
-    const uniqueCustomers = tickets.filter(t => {
-      if (!t.phoneNumber || seen.has(t.phoneNumber)) return false;
-      seen.add(t.phoneNumber);
-      return true;
-    });
+    const todayKey = new Date().toISOString().split('T')[0];
 
-    // Count visits per phone (occurrences in current queue)
+    const servedCount  = tickets.filter(t => t.status === 'Done').length;
+    const totalToday   = tickets.length;
+
+    // Scheduled vs walk-in
+    const todayAppts   = appointments.filter(a => a.date === todayKey);
+    const scheduledCnt = todayAppts.length;
+    const apptPhones   = new Set(todayAppts.map(a => a.phoneNumber));
+    const walkinCnt    = tickets.filter(t =>
+      t.createdAt.startsWith(todayKey) && !apptPhones.has(t.phoneNumber)
+    ).length;
+    const totalInflow  = scheduledCnt + walkinCnt || 1;
+
+    // Busiest hours
+    const hourCounts: Record<number, number> = {};
+    tickets.forEach(t => {
+      const h = new Date(t.createdAt).getHours();
+      hourCounts[h] = (hourCounts[h] ?? 0) + 1;
+    });
+    const maxHourCount  = Math.max(1, ...Object.values(hourCounts));
+    const businessHours = Array.from({ length: 12 }, (_, i) => i + 8);
+
+    function fmtHour(h: number) {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12  = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      return `${h12}${ampm}`;
+    }
+
+    // Service breakdown
+    const svcCounts: Record<string, number> = {};
+    tickets.forEach(t => { svcCounts[t.serviceName] = (svcCounts[t.serviceName] ?? 0) + 1; });
+    const svcEntries  = Object.entries(svcCounts).sort((a, b) => b[1] - a[1]);
+    const maxSvcCount = Math.max(1, ...Object.values(svcCounts));
+
+    // New vs repeat
     const visitMap: Record<string, number> = {};
     tickets.forEach(t => {
       if (t.phoneNumber) visitMap[t.phoneNumber] = (visitMap[t.phoneNumber] ?? 0) + 1;
     });
+    const uniquePhones = Object.keys(visitMap);
+    const repeatCount  = uniquePhones.filter(p => visitMap[p] > 1).length;
+    const newCount     = uniquePhones.length - repeatCount;
+    const totalUnique  = uniquePhones.length || 1;
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-        <Text style={[styles.sectionTitle, { color: C.text }]}>Customers in Queue</Text>
-        <Text style={[styles.sectionSub, { color: C.textMuted }]}>
-          Unique customers currently waiting or being served.
-        </Text>
 
-        {uniqueCustomers.length === 0 ? (
-          <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
-            <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No customers in queue right now</Text>
-          </View>
-        ) : (
-          uniqueCustomers.map(ticket => {
-            const visits = visitMap[ticket.phoneNumber] ?? 1;
-            return (
-              <View key={ticket.id} style={[styles.customerCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <View style={styles.customerCardLeft}>
-                  <View style={[styles.customerAvatar, { backgroundColor: C.primary + '22' }]}>
-                    <Text style={[styles.customerAvatarText, { color: C.primary }]}>
-                      {ticket.customerName.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={[styles.customerCardName, { color: C.text }]}>{ticket.customerName}</Text>
-                    <Text style={[styles.customerCardPhone, { color: C.textMuted }]}>{ticket.phoneNumber}</Text>
-                    <Text style={[styles.customerCardService, { color: C.textSub }]}>{ticket.serviceName}</Text>
-                  </View>
+        {/* Today at a Glance */}
+        <Text style={[styles.sectionTitle, { color: C.text }]}>Today at a Glance</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+          {[
+            { val: totalToday,          label: 'Total Customers', accent: '#2563eb' },
+            { val: servedCount,         label: 'Served',           accent: '#10b981' },
+            { val: liveTickets.length,  label: 'In Queue Now',     accent: '#f59e0b' },
+            { val: `${avgWait}m`,       label: 'Avg Wait',         accent: '#8b5cf6' },
+          ].map(({ val, label, accent }) => (
+            <View key={label} style={[styles.analyticStatCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
+              <Text style={[styles.analyticStatNum, { color: accent }]}>{val}</Text>
+              <Text style={[styles.analyticStatLbl, { color: C.textMuted }]}>{label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* How Customers Come In */}
+        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.analyticCardTitle, { color: C.text }]}>How Customers Come In</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Scheduled appointments vs same-day walk-ins</Text>
+          <View style={{ gap: 14, marginTop: 14 }}>
+            {[
+              { label: 'Scheduled Appointments', count: scheduledCnt, color: '#2563eb' },
+              { label: 'Walk-ins / Portal',       count: walkinCnt,   color: '#f59e0b' },
+            ].map(({ label, count, color }) => (
+              <View key={label}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: C.textSub }}>{label}</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color }}>{count}</Text>
                 </View>
-                <View style={styles.customerCardRight}>
-                  {visits > 1 ? (
-                    <View style={styles.visitBadgeBlue}>
-                      <Text style={styles.visitBadgeBlueText}>Repeat</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.visitBadgeAmber}>
-                      <Text style={styles.visitBadgeAmberText}>1st Visit</Text>
-                    </View>
-                  )}
-                  <Text style={[styles.customerCardStatus, { color: ticket.status === 'Called' ? '#10b981' : '#f59e0b' }]}>
-                    {ticket.status}
-                  </Text>
+                <View style={{ height: 8, backgroundColor: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
+                  <View style={{ height: 8, borderRadius: 4, backgroundColor: color,
+                    width: `${Math.round((count / totalInflow) * 100)}%` as any }} />
                 </View>
+                <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
+                  {Math.round((count / totalInflow) * 100)}% of today's traffic
+                </Text>
               </View>
-            );
-          })
-        )}
+            ))}
+          </View>
+        </View>
+
+        {/* Busiest Hours */}
+        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Busiest Hours</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Customer volume by time of day</Text>
+          {tickets.length === 0 ? (
+            <Text style={{ color: C.textMuted, fontSize: 13, marginTop: 12 }}>No data yet for today</Text>
+          ) : (
+            <View style={{ gap: 5, marginTop: 14 }}>
+              {businessHours.map(h => {
+                const cnt  = hourCounts[h] ?? 0;
+                const pct  = Math.round((cnt / maxHourCount) * 100);
+                const peak = cnt === maxHourCount && cnt > 0;
+                return (
+                  <View key={h} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Text style={{ fontSize: 11, color: C.textMuted, width: 36, textAlign: 'right' }}>{fmtHour(h)}</Text>
+                    <View style={{ flex: 1, height: 16, backgroundColor: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
+                      {cnt > 0 && (
+                        <View style={{ height: 16, borderRadius: 4,
+                          backgroundColor: peak ? '#2563eb' : '#2563eb55',
+                          width: `${pct}%` as any }} />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: peak ? '#2563eb' : C.textMuted, width: 16 }}>
+                      {cnt > 0 ? cnt : ''}
+                    </Text>
+                    {peak ? <Text style={{ fontSize: 10, color: '#2563eb', fontWeight: '700', width: 30 }}>Peak</Text>
+                           : <View style={{ width: 30 }} />}
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* Service Breakdown */}
+        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Most Popular Services</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Ranked by number of customers</Text>
+          {svcEntries.length === 0 ? (
+            <Text style={{ color: C.textMuted, fontSize: 13, marginTop: 12 }}>No data yet</Text>
+          ) : (
+            <View style={{ gap: 12, marginTop: 14 }}>
+              {svcEntries.map(([name, cnt], i) => {
+                const colors = ['#10b981', '#2563eb', '#8b5cf6', '#f59e0b', '#ef4444'];
+                const color  = colors[i % colors.length];
+                return (
+                  <View key={name}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: C.textSub }}>{name}</Text>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color }}>{cnt} customers</Text>
+                    </View>
+                    <View style={{ height: 8, backgroundColor: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
+                      <View style={{ height: 8, borderRadius: 4, backgroundColor: color,
+                        width: `${Math.round((cnt / maxSvcCount) * 100)}%` as any }} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* New vs Repeat */}
+        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Customer Retention</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>New vs returning customers</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+            {[
+              { label: 'New Customers', count: newCount,    color: '#10b981', pct: Math.round((newCount / totalUnique) * 100) },
+              { label: 'Returning',     count: repeatCount, color: '#2563eb', pct: Math.round((repeatCount / totalUnique) * 100) },
+            ].map(({ label, count, color, pct }) => (
+              <View key={label} style={{ flex: 1, backgroundColor: C.surfaceAlt, borderRadius: 12, padding: 14, alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 28, fontWeight: '800', color }}>{count}</Text>
+                <Text style={{ fontSize: 12, fontWeight: '600', color: C.textSub }}>{label}</Text>
+                <Text style={{ fontSize: 11, color: C.textMuted }}>{pct}% of total</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
       </ScrollView>
     );
   }
@@ -1638,6 +1748,17 @@ const styles = StyleSheet.create({
   planSelectBtn: { borderRadius: BorderRadius.md, paddingHorizontal: 16, paddingVertical: 8 },
   planSelectBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   planFeature: { fontSize: 13 },
+
+  // Analytics
+  analyticStatCard: {
+    flex: 1, minWidth: '45%', borderRadius: 12, padding: 14,
+    borderTopWidth: 3, borderWidth: 1, alignItems: 'center',
+  },
+  analyticStatNum: { fontSize: 24, fontWeight: '800' },
+  analyticStatLbl: { fontSize: 11, marginTop: 4, textAlign: 'center' },
+  analyticCard: { borderRadius: 14, padding: 16, borderWidth: 1 },
+  analyticCardTitle: { fontSize: 15, fontWeight: '700' },
+  analyticCardSub: { fontSize: 12, marginTop: 2 },
 
   apptCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
