@@ -1,0 +1,132 @@
+OmniQueue - Company Handoff Guide
+===================================
+
+OVERVIEW
+--------
+OmniQueue is a queue and appointment management system for businesses.
+It includes a web frontend, a Node.js backend API, and a PostgreSQL database,
+all running via Docker on a Linux server.
+
+Live URL: https://team3.noblesolutionsenterprises.com
+
+
+TECH STACK
+----------
+- Frontend: React Native / Expo (web build served via Caddy)
+- Backend:  Node.js + Express (port 4000, internal only)
+- Database: PostgreSQL 18
+- Auth:     Better Auth (email/password sessions)
+- SMS:      Telnyx
+- Email:    Resend
+- Payments: Stripe
+- Hosting:  Docker Compose on Linux server
+
+
+SERVER ACCESS
+-------------
+- SSH into the server to manage the app
+- App lives at: ~/app/q-manager/
+- Environment variables are in: ~/app/q-manager/.env
+- To restart the app:
+    cd ~/app/q-manager && docker compose up -d
+- To rebuild after code changes:
+    cd ~/app && git pull origin main && cd q-manager && docker compose up -d --build
+- To view backend logs:
+    cd ~/app/q-manager && docker compose logs backend --tail=50
+
+
+ENVIRONMENT VARIABLES (~/app/q-manager/.env)
+---------------------------------------------
+The following variables must be set on the server:
+
+  POSTGRES_PASSWORD=           # Database password
+  BETTER_AUTH_SECRET=          # Random secret string (run: openssl rand -hex 32)
+  BETTER_AUTH_URL=             # Your public site URL (e.g. https://yourdomain.com)
+  FRONTEND_URL=                # Your public site URL (same as above)
+
+  # Resend (email notifications)
+  RESEND_API_KEY=              # From resend.com dashboard
+  RESEND_FROM_EMAIL=           # Verified sender email (e.g. notifications@yourcompany.com)
+
+  # Telnyx (SMS notifications)
+  TELNYX_API_KEY=              # From telnyx.com dashboard
+  TELNYX_FROM_NUMBER=          # Your purchased Telnyx phone number (e.g. +16465364092)
+  TELNYX_SIMULATE=false        # Set to true to log SMS without sending (testing only)
+
+  # Stripe (payments)
+  STRIPE_SECRET_KEY=           # From stripe.com dashboard (sk_live_... for production)
+  STRIPE_PRICE_ID=             # Price ID for your subscription product
+  STRIPE_WEBHOOK_SECRET=       # From Stripe webhook settings
+
+
+SETTING UP SMS (TELNYX)
+------------------------
+1. Create a Telnyx account at telnyx.com
+2. Purchase a US phone number (~$1/month)
+3. Complete 10DLC registration (required by US carriers):
+   a. Register your Brand (company name, address, EIN)
+   b. Register a Campaign (select "Low Volume Mixed" use case)
+   c. Assign your phone number to the campaign
+   d. Wait 1-3 business days for approval
+4. Create a Messaging Profile and assign your number to it
+5. Add TELNYX_API_KEY and TELNYX_FROM_NUMBER to the .env file
+6. Set TELNYX_SIMULATE=false for real SMS sending
+
+Note: Without 10DLC registration, SMS will be blocked by US carriers.
+
+
+SETTING UP EMAIL (RESEND)
+--------------------------
+1. Create a Resend account at resend.com
+2. Verify your company domain (e.g. yourcompany.com)
+3. Use a sender address like: notifications@yourcompany.com
+4. Add RESEND_API_KEY and RESEND_FROM_EMAIL to the .env file
+5. Free tier includes 3,000 emails/month
+
+
+SETTING UP PAYMENTS (STRIPE)
+------------------------------
+1. Create a Stripe account at stripe.com
+2. Create a product and a recurring price for your subscription plan
+3. Add a webhook endpoint: https://yourdomain.com/api/payments/webhook
+4. Add STRIPE_SECRET_KEY, STRIPE_PRICE_ID, STRIPE_WEBHOOK_SECRET to .env
+5. Use test mode (sk_test_...) for testing, live mode (sk_live_...) for production
+
+
+BUSINESS NOTIFICATION CHANNEL
+-------------------------------
+Each business can choose how to notify customers:
+  - "sms"  : SMS only via Telnyx
+  - "email": Email only via Resend
+  - "both" : Both SMS and email
+
+This can be updated via the business settings in the app or directly:
+  PUT /api/businesses/me
+  Body: { "notificationChannel": "sms" | "email" | "both" }
+
+
+DATABASE
+--------
+- The database is managed by Docker and persists in a named volume (pgdata)
+- Schema is defined in: q-manager/db/init.sql
+- WARNING: Running "docker compose down -v" will wipe all data
+- To safely restart without losing data: "docker compose down && docker compose up -d"
+
+
+ESTIMATED MONTHLY COSTS
+------------------------
+- Telnyx number:        ~$1/month
+- Telnyx 10DLC campaign:~$10/month
+- Telnyx SMS:           ~$0.01/message
+- Resend:               Free up to 3,000 emails/month
+- Stripe:               2.9% + $0.30 per transaction
+- Server hosting:       Depends on your provider
+
+
+SUPPORT
+-------
+For questions about the codebase, refer to the git history and inline comments.
+For third-party services, use their respective support channels:
+  - Telnyx:  telnyx.com/support
+  - Resend:  resend.com/docs
+  - Stripe:  stripe.com/docs
