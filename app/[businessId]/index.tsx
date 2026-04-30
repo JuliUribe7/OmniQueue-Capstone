@@ -20,10 +20,10 @@ type ConfirmedBooking = {
   customerName: string; phoneNumber: string; createdAt: string;
 };
 
-function getNext14Days(): Date[] {
+function getNext60Days(): Date[] {
   const days: Date[] = [];
   const today = new Date();
-  for (let i = 1; i <= 14; i++) {
+  for (let i = 1; i <= 60; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
     days.push(d);
@@ -153,7 +153,7 @@ export default function CustomerPortal() {
   }
 
   // Booking helpers
-  const DATES = getNext14Days();
+  const DATES = getNext60Days();
   const TIME_SLOTS = getTimeSlots();
   const bookSelectedService = services.find(s => s.id === bookServiceId) ?? services[0];
 
@@ -195,6 +195,14 @@ export default function CustomerPortal() {
         phoneNumber: bookPhone.trim(),
         createdAt: appointment.createdAt,
       });
+      // Immediately mark this slot as taken so no other customer can double-book
+      setBookedSlots(prev => {
+        const existing = prev.find(s => s.time === bookTime);
+        if (existing) {
+          return prev.map(s => s.time === bookTime ? { ...s, count: s.count + 1 } : s);
+        }
+        return [...prev, { time: bookTime, count: 1 }];
+      });
     } catch (e: any) {
       setBookError(e?.message ?? 'Could not book appointment. Please try again.');
     } finally {
@@ -209,7 +217,7 @@ export default function CustomerPortal() {
 
   // ── Booking confirmed screen ──────────────────────────────────────────────
   if (bookConfirmed) {
-    const dateObj = DATES.find(d => dateKey(d) === bookConfirmed.date);
+    const dateObj = DATES.find((d: Date) => dateKey(d) === bookConfirmed.date);
     const displayDate = dateObj ? formatDisplayDate(dateObj) : bookConfirmed.date;
     return (
       <SafeAreaView style={styles.container}>
@@ -376,7 +384,7 @@ export default function CustomerPortal() {
               <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Choose a Date</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
                 <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 4, paddingBottom: 4 }}>
-                  {DATES.map(d => {
+                  {DATES.map((d: Date) => {
                     const key = dateKey(d);
                     const isSelected = bookDate === key;
                     return (
