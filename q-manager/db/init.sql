@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS "Business" (
   "subscriptionStatus"  TEXT NOT NULL DEFAULT 'inactive',
   "plan"                TEXT NOT NULL DEFAULT 'basic',
   "notificationChannel" TEXT NOT NULL DEFAULT 'sms',
+  "googleTokens"        TEXT,
   "createdAt"           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

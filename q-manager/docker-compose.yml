@@ -16,6 +16,9 @@ services:
       - TELNYX_API_KEY=${TELNYX_API_KEY}
       - TELNYX_FROM_NUMBER=${TELNYX_FROM_NUMBER}
       - TELNYX_SIMULATE=${TELNYX_SIMULATE}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
     depends_on:
       db:
         condition: service_healthy

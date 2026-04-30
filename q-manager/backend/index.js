@@ -25,6 +25,8 @@ const telnyxRoutes = require('./src/routes/telnyxRoutes');
 app.use(telnyxRoutes);
 const paymentRoutes = require('./src/routes/paymentRoutes');
 app.use('/api/payments', paymentRoutes);
+const googleRoutes = require('./src/routes/googleRoutes');
+app.use(googleRoutes);
 const errorHandler = require('./src/middleware/errorHandler');
 app.use(errorHandler);
 
