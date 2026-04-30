@@ -128,10 +128,10 @@ async function createAppointment(businessId, serviceId, staffId, customerName, p
 
 async function getPublicAppointments(businessId, date) {
   const res = await query(
-    'SELECT "time", "date" FROM "Appointment" WHERE "businessId" = $1 AND "date" = $2',
+    'SELECT "time", COUNT(*) AS count FROM "Appointment" WHERE "businessId" = $1 AND "date" = $2 GROUP BY "time"',
     [businessId, date],
   );
-  return res.rows;
+  return res.rows.map(r => ({ time: r.time, count: parseInt(r.count, 10) }));
 }
 
 async function getAllAppointments(businessId) {
