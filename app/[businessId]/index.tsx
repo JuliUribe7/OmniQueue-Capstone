@@ -20,21 +20,6 @@ type ConfirmedBooking = {
   customerName: string; phoneNumber: string; createdAt: string;
 };
 
-function getNext60Days(): Date[] {
-  const days: Date[] = [];
-  const today = new Date();
-  for (let i = 1; i <= 60; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-    days.push(d);
-  }
-  return days;
-}
-
-function dateKey(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
 function formatDisplayDate(d: Date): string {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
@@ -89,6 +74,7 @@ export default function CustomerPortal() {
   const [bookError, setBookError]         = useState('');
   const [bookConfirmed, setBookConfirmed] = useState<ConfirmedBooking | null>(null);
   const [booking, setBooking]             = useState(false);
+  const [calMonth, setCalMonth]           = useState<Date>(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
 
   // Fetch booked slots from backend when date changes
   useEffect(() => {
@@ -153,7 +139,6 @@ export default function CustomerPortal() {
   }
 
   // Booking helpers
-  const DATES = getNext60Days();
   const TIME_SLOTS = getTimeSlots();
   const bookSelectedService = services.find(s => s.id === bookServiceId) ?? services[0];
 
@@ -217,8 +202,8 @@ export default function CustomerPortal() {
 
   // ── Booking confirmed screen ──────────────────────────────────────────────
   if (bookConfirmed) {
-    const dateObj = DATES.find((d: Date) => dateKey(d) === bookConfirmed.date);
-    const displayDate = dateObj ? formatDisplayDate(dateObj) : bookConfirmed.date;
+    const dateObj = new Date(bookConfirmed.date + 'T12:00:00');
+    const displayDate = formatDisplayDate(dateObj);
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar style="dark" />
@@ -380,32 +365,80 @@ export default function CustomerPortal() {
                 ))}
               </View>
 
-              {/* Date picker */}
+              {/* Date picker — month calendar grid */}
               <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Choose a Date</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }}>
-                <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 4, paddingBottom: 4 }}>
-                  {DATES.map((d: Date) => {
-                    const key = dateKey(d);
-                    const isSelected = bookDate === key;
-                    return (
-                      <TouchableOpacity key={key}
-                        style={[styles.dateChip, isSelected && styles.dateChipSelected]}
-                        onPress={() => { setBookDate(key); setBookTime(''); }}
-                        activeOpacity={0.7}>
-                        <Text style={[styles.dateChipDay, isSelected && { color: '#fff' }]}>
-                          {d.toLocaleDateString('en-US', { weekday: 'short' })}
-                        </Text>
-                        <Text style={[styles.dateChipNum, isSelected && { color: '#fff' }]}>
-                          {d.getDate()}
-                        </Text>
-                        <Text style={[styles.dateChipMon, isSelected && { color: '#bfdbfe' }]}>
-                          {d.toLocaleDateString('en-US', { month: 'short' })}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+              <View style={styles.calGrid}>
+                {/* Month nav */}
+                <View style={styles.calNav}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const prev = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1);
+                      const todayFirst = new Date(); todayFirst.setDate(1); todayFirst.setHours(0,0,0,0);
+                      if (prev >= todayFirst) setCalMonth(prev);
+                    }}
+                    style={styles.calNavBtn}>
+                    <Text style={styles.calNavArrow}>‹</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.calMonthLabel}>
+                    {calMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      const next = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1);
+                      const maxDate = new Date(); maxDate.setDate(maxDate.getDate() + 60);
+                      if (next.getFullYear() < maxDate.getFullYear() ||
+                          (next.getFullYear() === maxDate.getFullYear() && next.getMonth() <= maxDate.getMonth())) {
+                        setCalMonth(next);
+                      }
+                    }}
+                    style={styles.calNavBtn}>
+                    <Text style={styles.calNavArrow}>›</Text>
+                  </TouchableOpacity>
                 </View>
-              </ScrollView>
+                {/* Day of week headers */}
+                <View style={styles.calRow}>
+                  {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                    <Text key={d} style={styles.calDowLabel}>{d}</Text>
+                  ))}
+                </View>
+                {/* Day cells */}
+                {(() => {
+                  const today = new Date(); today.setHours(0,0,0,0);
+                  const maxDate = new Date(today); maxDate.setDate(today.getDate() + 60);
+                  const firstDow = new Date(calMonth.getFullYear(), calMonth.getMonth(), 1).getDay();
+                  const daysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
+                  const cells: (number | null)[] = [];
+                  for (let i = 0; i < firstDow; i++) cells.push(null);
+                  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+                  while (cells.length % 7 !== 0) cells.push(null);
+                  const rows: (number | null)[][] = [];
+                  for (let i = 0; i < cells.length; i += 7) rows.push(cells.slice(i, i + 7));
+                  return rows.map((row, ri) => (
+                    <View key={ri} style={styles.calRow}>
+                      {row.map((day, ci) => {
+                        if (!day) return <View key={ci} style={styles.calCell} />;
+                        const cellDate = new Date(calMonth.getFullYear(), calMonth.getMonth(), day);
+                        cellDate.setHours(0,0,0,0);
+                        const key = `${calMonth.getFullYear()}-${String(calMonth.getMonth()+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+                        const disabled = cellDate <= today || cellDate > maxDate;
+                        const isSelected = bookDate === key;
+                        return (
+                          <TouchableOpacity
+                            key={ci}
+                            style={[styles.calCell, isSelected && styles.calCellSelected, disabled && styles.calCellDisabled]}
+                            onPress={() => { if (!disabled) { setBookDate(key); setBookTime(''); } }}
+                            activeOpacity={disabled ? 1 : 0.7}
+                            disabled={disabled}>
+                            <Text style={[styles.calDayNum, isSelected && { color: '#fff' }, disabled && { color: '#d1d5db' }]}>
+                              {day}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ));
+                })()}
+              </View>
 
               {/* Time slots */}
               {!!bookDate && (
@@ -531,11 +564,17 @@ const styles = StyleSheet.create({
   staffInitial: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   staffInitialText: { fontSize: 13, fontWeight: '700' },
 
-  dateChip: { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: BorderRadius.md, paddingVertical: 10, paddingHorizontal: 12, backgroundColor: '#f9fafb', alignItems: 'center', minWidth: 64 },
-  dateChipSelected: { borderColor: '#2563eb', backgroundColor: '#2563eb' },
-  dateChipDay: { fontSize: 11, fontWeight: '600', color: '#6b7280' },
-  dateChipNum: { fontSize: 20, fontWeight: '800', color: '#111827', lineHeight: 24 },
-  dateChipMon: { fontSize: 11, color: '#9ca3af' },
+  calGrid: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: BorderRadius.lg, overflow: 'hidden', marginTop: 4 },
+  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  calNavBtn: { padding: 4, minWidth: 32, alignItems: 'center' },
+  calNavArrow: { fontSize: 22, color: '#2563eb', fontWeight: '700' },
+  calMonthLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  calRow: { flexDirection: 'row' },
+  calDowLabel: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9ca3af', paddingVertical: 6, backgroundColor: '#f9fafb' },
+  calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 0.5, borderColor: '#f3f4f6' },
+  calCellSelected: { backgroundColor: '#2563eb' },
+  calCellDisabled: { backgroundColor: '#fafafa' },
+  calDayNum: { fontSize: 14, fontWeight: '600', color: '#111827' },
 
   timeChip: { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: BorderRadius.md, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f9fafb', alignItems: 'center', minWidth: 80 },
   timeChipSelected: { borderColor: '#2563eb', backgroundColor: '#2563eb' },
