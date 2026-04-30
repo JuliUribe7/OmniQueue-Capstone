@@ -443,25 +443,26 @@ export default function CustomerPortal() {
               {/* Time slots */}
               {!!bookDate && (
                 <>
-                  <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Choose a Time</Text>
-                  <View style={styles.chipWrap}>
+                  <Text style={[styles.fieldLabel, { marginTop: 10 }]}>
+                    Available Times — {new Date(bookDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </Text>
+                  <View style={styles.timeGrid}>
                     {TIME_SLOTS.map(t => {
                       const available = isSlotAvailable(bookDate, t);
                       const isSelected = bookTime === t;
                       return (
                         <TouchableOpacity key={t}
-                          style={[styles.timeChip,
-                            isSelected && styles.timeChipSelected,
-                            !available && styles.timeChipUnavailable]}
+                          style={[styles.timeCell,
+                            isSelected && styles.timeCellSelected,
+                            !available && styles.timeCellUnavailable]}
                           onPress={() => available && setBookTime(t)}
                           activeOpacity={available ? 0.7 : 1}
                           disabled={!available}>
-                          <Text style={[styles.timeChipText,
+                          <Text style={[styles.timeCellText,
                             isSelected && { color: '#fff' },
-                            !available && { color: '#9ca3af' }]}>
+                            !available && { color: '#c4c4c4' }]}>
                             {formatTime(t)}
                           </Text>
-                          {!available && <Text style={styles.timeChipUnavailText}>Full</Text>}
                         </TouchableOpacity>
                       );
                     })}
@@ -565,22 +566,22 @@ const styles = StyleSheet.create({
   staffInitialText: { fontSize: 13, fontWeight: '700' },
 
   calGrid: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: BorderRadius.lg, overflow: 'hidden', marginTop: 4 },
-  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  calNavBtn: { padding: 4, minWidth: 32, alignItems: 'center' },
-  calNavArrow: { fontSize: 22, color: '#2563eb', fontWeight: '700' },
-  calMonthLabel: { fontSize: 15, fontWeight: '700', color: '#111827' },
+  calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  calNavBtn: { paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' },
+  calNavArrow: { fontSize: 20, color: '#2563eb', fontWeight: '700' },
+  calMonthLabel: { fontSize: 13, fontWeight: '700', color: '#111827' },
   calRow: { flexDirection: 'row' },
-  calDowLabel: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#9ca3af', paddingVertical: 6, backgroundColor: '#f9fafb' },
-  calCell: { flex: 1, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 0.5, borderColor: '#f3f4f6' },
-  calCellSelected: { backgroundColor: '#2563eb' },
+  calDowLabel: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '700', color: '#9ca3af', paddingVertical: 4, backgroundColor: '#f9fafb' },
+  calCell: { flex: 1, height: 34, alignItems: 'center', justifyContent: 'center', borderWidth: 0.5, borderColor: '#f3f4f6' },
+  calCellSelected: { backgroundColor: '#2563eb', borderRadius: 4 },
   calCellDisabled: { backgroundColor: '#fafafa' },
-  calDayNum: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  calDayNum: { fontSize: 13, fontWeight: '600', color: '#111827' },
 
-  timeChip: { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: BorderRadius.md, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f9fafb', alignItems: 'center', minWidth: 80 },
-  timeChipSelected: { borderColor: '#2563eb', backgroundColor: '#2563eb' },
-  timeChipUnavailable: { backgroundColor: '#f3f4f6', borderColor: '#e5e7eb', opacity: 0.5 },
-  timeChipText: { fontSize: 13, fontWeight: '600', color: '#374151' },
-  timeChipUnavailText: { fontSize: 10, color: '#9ca3af', marginTop: 2 },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  timeCell: { width: '23%', paddingVertical: 9, alignItems: 'center', borderRadius: BorderRadius.md, backgroundColor: '#f0f4f8', borderWidth: 1.5, borderColor: '#e5e7eb' },
+  timeCellSelected: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  timeCellUnavailable: { backgroundColor: '#f9fafb', borderColor: '#f3f4f6', opacity: 0.5 },
+  timeCellText: { fontSize: 12, fontWeight: '600', color: '#374151' },
 
   joinBtn: { backgroundColor: '#2563eb', borderRadius: BorderRadius.lg, paddingVertical: 16, alignItems: 'center', marginTop: 8 },
   joinBtnDisabled: { opacity: 0.4 },
