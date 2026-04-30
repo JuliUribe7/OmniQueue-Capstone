@@ -131,6 +131,8 @@ export default function BusinessDashboard() {
   // Appointments
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
   const [apptView, setApptView] = useState<'today' | 'week'>('today');
+  const [calendarDate, setCalendarDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
 
   // Google Calendar
   const [googleConnected, setGoogleConnected]   = useState(false);
@@ -1124,19 +1126,6 @@ export default function BusinessDashboard() {
   // ── Appointments tab ───────────────────────────────────────────────────────
   function renderAppointments() {
     const todayKey = new Date().toISOString().split('T')[0];
-    const weekStart = new Date();
-    weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-
-    const filtered = apptView === 'today'
-      ? appointments.filter(a => a.date === todayKey)
-      : appointments.filter(a => {
-          const d = new Date(a.date);
-          return d >= weekStart && d <= weekEnd;
-        });
-
-    const sorted = [...filtered].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
     function formatTime(t: string) {
       const [h, m] = t.split(':').map(Number);
@@ -1145,49 +1134,123 @@ export default function BusinessDashboard() {
       return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
     }
 
-    function formatDate(d: string) {
-      return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    // Build calendar grid for current month
+    const year  = calendarMonth.getFullYear();
+    const month = calendarMonth.getMonth();
+    const monthLabel = calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Build set of dates that have appointments
+    const apptDates = new Set(appointments.map(a => a.date));
+
+    // Days of selected date
+    const selectedAppts = appointments
+      .filter(a => a.date === calendarDate)
+      .sort((a, b) => a.time.localeCompare(b.time));
+
+    function prevMonth() {
+      setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1));
     }
+    function nextMonth() {
+      setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1));
+    }
+    function pad2(n: number) { return String(n).padStart(2, '0'); }
+    function dayKey(d: number) { return `${year}-${pad2(month + 1)}-${pad2(d)}`; }
+
+    const calCells: (number | null)[] = [
+      ...Array(firstDay).fill(null),
+      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+    ];
+    // Pad to complete last row
+    while (calCells.length % 7 !== 0) calCells.push(null);
+
+    const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-        {/* Today / This Week toggle */}
-        <View style={{ flexDirection: 'row', backgroundColor: C.surfaceAlt, borderRadius: 10, padding: 4, marginBottom: 8 }}>
-          {(['today', 'week'] as const).map(v => (
-            <TouchableOpacity
-              key={v}
-              style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center',
-                backgroundColor: apptView === v ? C.surface : 'transparent' }}
-              onPress={() => setApptView(v)}
-            >
-              <Text style={{ fontSize: 14, fontWeight: '600', color: apptView === v ? C.text : C.textMuted }}>
-                {v === 'today' ? 'Today' : 'This Week'}
-              </Text>
+
+        {/* Calendar card */}
+        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border, padding: 12 }]}>
+
+          {/* Month nav */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <TouchableOpacity onPress={prevMonth} style={{ padding: 6 }}>
+              <Text style={{ fontSize: 18, color: C.primary, fontWeight: '700' }}>‹</Text>
             </TouchableOpacity>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: C.text }}>{monthLabel}</Text>
+            <TouchableOpacity onPress={nextMonth} style={{ padding: 6 }}>
+              <Text style={{ fontSize: 18, color: C.primary, fontWeight: '700' }}>›</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Day labels */}
+          <View style={{ flexDirection: 'row' }}>
+            {DAY_LABELS.map(d => (
+              <View key={d} style={{ flex: 1, alignItems: 'center', paddingBottom: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: C.textMuted }}>{d}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Day cells */}
+          {Array.from({ length: calCells.length / 7 }, (_, row) => (
+            <View key={row} style={{ flexDirection: 'row' }}>
+              {calCells.slice(row * 7, row * 7 + 7).map((day, col) => {
+                if (!day) return <View key={col} style={{ flex: 1, height: 40 }} />;
+                const key      = dayKey(day);
+                const isToday  = key === todayKey;
+                const selected = key === calendarDate;
+                const hasAppts = apptDates.has(key);
+                return (
+                  <TouchableOpacity
+                    key={col}
+                    style={{ flex: 1, height: 40, alignItems: 'center', justifyContent: 'center' }}
+                    onPress={() => setCalendarDate(key)}
+                  >
+                    <View style={{
+                      width: 32, height: 32, borderRadius: 16,
+                      alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: selected ? C.primary : isToday ? C.primary + '22' : 'transparent',
+                    }}>
+                      <Text style={{
+                        fontSize: 13, fontWeight: selected || isToday ? '700' : '400',
+                        color: selected ? '#fff' : isToday ? C.primary : C.text,
+                      }}>{day}</Text>
+                    </View>
+                    {hasAppts && !selected && (
+                      <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: C.primary, marginTop: 1 }} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           ))}
         </View>
 
-        <Text style={[styles.sectionSub, { color: C.textMuted }]}>
-          {sorted.length} appointment{sorted.length !== 1 ? 's' : ''} {apptView === 'today' ? 'today' : 'this week'}
-        </Text>
+        {/* Selected day appointments */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>
+            {calendarDate === todayKey ? "Today's Appointments" :
+              new Date(calendarDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+          </Text>
+          <Text style={[styles.sectionSub, { color: C.textMuted, marginTop: 0 }]}>
+            {selectedAppts.length} booked
+          </Text>
+        </View>
 
-        {sorted.length === 0 ? (
-          <View style={[styles.emptyPreview, { backgroundColor: C.surface, marginTop: 12 }]}>
-            <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>
-              No appointments {apptView === 'today' ? 'today' : 'this week'}
-            </Text>
+        {selectedAppts.length === 0 ? (
+          <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
+            <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No appointments this day</Text>
           </View>
         ) : (
-          sorted.map(appt => {
+          selectedAppts.map(appt => {
             const staffMember = staff.find(s => s.id === appt.staffId);
-            const service = services.find(s => s.id === appt.serviceId);
+            const service     = services.find(s => s.id === appt.serviceId);
             return (
               <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border }]}>
                 <View style={styles.apptTimeCol}>
                   <Text style={[styles.apptTime, { color: C.primary }]}>{formatTime(appt.time)}</Text>
-                  {apptView === 'week' && (
-                    <Text style={[styles.apptDate, { color: C.textMuted }]}>{formatDate(appt.date)}</Text>
-                  )}
                 </View>
                 <View style={styles.apptInfo}>
                   <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
