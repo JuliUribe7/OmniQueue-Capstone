@@ -149,6 +149,14 @@ export const api = {
       body: JSON.stringify({ businessName, businessId }),
     }),
 
+  // Google Calendar
+  getGoogleAuthUrl: (): Promise<{ url: string }> =>
+    apiFetch('/api/google/auth'),
+  saveGoogleTokens: (tokens: object): Promise<{ success: boolean }> =>
+    apiFetch('/api/google/save-tokens', { method: 'POST', body: JSON.stringify({ tokens }) }),
+  getGoogleStatus: (): Promise<{ connected: boolean }> =>
+    apiFetch('/api/google/status'),
+
   // Admin
   getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
     apiFetch('/api/admin/businesses'),

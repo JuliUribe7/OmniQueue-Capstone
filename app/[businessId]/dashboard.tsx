@@ -132,12 +132,38 @@ export default function BusinessDashboard() {
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
   const [apptView, setApptView] = useState<'today' | 'week'>('today');
 
+  // Google Calendar
+  const [googleConnected, setGoogleConnected]   = useState(false);
+  const [googleConnecting, setGoogleConnecting] = useState(false);
+  const [googleSaved, setGoogleSaved]           = useState(false);
+
   // Subscription plan
   const [plan, setPlan] = useState<'basic' | 'pro'>('pro');
 
   // Stripe checkout state
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError]     = useState('');
+
+  // ── Handle Google OAuth callback tokens in URL ─────────────────────────────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const rawTokens = params.get('google_tokens');
+    if (!rawTokens) {
+      // Just check current status
+      api.getGoogleStatus().then(r => setGoogleConnected(r.connected)).catch(() => {});
+      return;
+    }
+    // Tokens came back from Google OAuth — save them then clean the URL
+    try {
+      const tokens = JSON.parse(decodeURIComponent(rawTokens));
+      api.saveGoogleTokens(tokens)
+        .then(() => { setGoogleConnected(true); setGoogleSaved(true); setTimeout(() => setGoogleSaved(false), 4000); })
+        .catch(() => {});
+    } catch {}
+    const clean = window.location.pathname;
+    window.history.replaceState({}, '', clean);
+  }, []);
 
   // ── Load data on mount ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1206,10 +1232,10 @@ export default function BusinessDashboard() {
         <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={[styles.settingsCardTitle, { color: C.text }]}>Business Profile</Text>
           {[
-            { label: 'Business Name', val: business.name },
-            { label: 'Business Type', val: typeLabel[business.type] ?? business.type },
-            { label: 'Business ID',   val: business.id },
-            { label: 'Customer Portal', val: `/${business.id}` },
+            { label: 'Business Name', val: business?.name ?? '' },
+            { label: 'Business Type', val: typeLabel[business?.type ?? ''] ?? business?.type ?? '' },
+            { label: 'Business ID',   val: business?.id ?? '' },
+            { label: 'Customer Portal', val: `/${business?.id ?? ''}` },
           ].map(({ label, val }) => (
             <View key={label} style={[styles.profileRow, { borderBottomColor: C.border }]}>
               <Text style={[styles.profileLabel, { color: C.textMuted }]}>{label}</Text>
@@ -1305,6 +1331,51 @@ export default function BusinessDashboard() {
             <Text style={styles.addBtnText}>Save Notification Preference</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Google Calendar */}
+        <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.settingsCardTitle, { color: C.text }]}>Google Calendar</Text>
+          <Text style={[styles.settingsCardSub, { color: C.textMuted }]}>
+            Connect your Google account so appointments automatically appear in your calendar.
+          </Text>
+
+          {googleSaved && (
+            <View style={[styles.successBanner, { marginTop: 12 }]}>
+              <Text style={styles.successText}>✅ Google Calendar connected!</Text>
+            </View>
+          )}
+
+          {googleConnected ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14,
+              backgroundColor: '#f0fdf4', borderRadius: 10, padding: 12 }}>
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: '#10b981' }} />
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#065f46' }}>Google Calendar connected</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={[styles.addBtn, { marginTop: 14, backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#d1d5db' },
+                googleConnecting && { opacity: 0.6 }]}
+              disabled={googleConnecting}
+              onPress={async () => {
+                setGoogleConnecting(true);
+                try {
+                  const { url } = await api.getGoogleAuthUrl();
+                  if (typeof window !== 'undefined') window.location.href = url;
+                } catch {
+                  setGoogleConnecting(false);
+                }
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+                <Text style={{ fontSize: 18 }}>🗓</Text>
+                <Text style={{ fontSize: 15, fontWeight: '700', color: '#111827' }}>
+                  {googleConnecting ? 'Redirecting...' : 'Connect Google Calendar'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
       </ScrollView>
     );
   }
