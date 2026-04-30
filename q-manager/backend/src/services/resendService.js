@@ -6,14 +6,11 @@ function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
 
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, attachments) {
   const resend = getResend();
-  const { error } = await resend.emails.send({
-    from: FROM_EMAIL,
-    to,
-    subject,
-    html,
-  });
+  const payload = { from: FROM_EMAIL, to, subject, html };
+  if (attachments) payload.attachments = attachments;
+  const { error } = await resend.emails.send(payload);
   if (error) throw new Error(`Resend error: ${error.message}`);
 }
 

@@ -46,6 +46,14 @@ async function getServices(businessId) {
   return res.rows;
 }
 
+async function getServiceById(serviceId) {
+  const res = await query(
+    'SELECT * FROM "Service" WHERE "id" = $1',
+    [serviceId],
+  );
+  return res.rows[0] || null;
+}
+
 async function addService(businessId, name, avgTime) {
   const res = await query(
     `INSERT INTO "Service" ("businessId", "name", "avgTime")
@@ -179,6 +187,7 @@ module.exports = {
   getBusinessById,
   updateBusiness,
   getServices,
+  getServiceById,
   addService,
   updateService,
   deleteService,

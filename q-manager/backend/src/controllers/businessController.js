@@ -1,6 +1,8 @@
 const businessService = require('../services/businessService');
 const queueService = require('../services/queueService');
 const { v4: uuidv4 } = require('uuid');
+const { generateICS } = require('../services/icsService');
+const { sendEmail } = require('../services/resendService');
 
 async function getAllBusinesses(req, res, next) {
   try {
@@ -193,6 +195,37 @@ async function createAppointment(req, res, next) {
     if (!customerName || !phoneNumber || !date || !time)
       return res.status(400).json({ error: 'customerName, phoneNumber, date, and time are required' });
     const appointment = await businessService.createAppointment(businessId, serviceId, staffId, customerName, phoneNumber, date, time, customerEmail);
+
+    // Send ICS calendar invite if customer provided email
+    if (customerEmail) {
+      try {
+        const business = await businessService.getBusinessById(businessId);
+        const service = serviceId ? await businessService.getServiceById(serviceId) : null;
+        const icsContent = generateICS({
+          customerName,
+          businessName: business ? business.name : 'OmniQueue',
+          serviceName: service ? service.name : 'Appointment',
+          date,
+          time,
+          durationMinutes: service ? service.avgTime : 30,
+        });
+        await sendEmail(
+          customerEmail,
+          `Appointment Confirmed – ${business ? business.name : 'OmniQueue'}`,
+          `<p>Hi ${customerName},</p>
+           <p>Your appointment has been confirmed!</p>
+           <p><strong>Date:</strong> ${date}<br>
+           <strong>Time:</strong> ${time}<br>
+           <strong>Service:</strong> ${service ? service.name : 'Appointment'}</p>
+           <p>Open the attached file to add this to your calendar.</p>
+           <p>Thanks for using OmniQueue!</p>`,
+          [{ filename: 'appointment.ics', content: Buffer.from(icsContent).toString('base64') }],
+        );
+      } catch (emailErr) {
+        console.error('Failed to send appointment email:', emailErr.message);
+      }
+    }
+
     res.status(201).json({ appointment });
   } catch (err) { next(err); }
 }
