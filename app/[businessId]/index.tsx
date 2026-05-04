@@ -239,7 +239,38 @@ export default function CustomerPortal() {
           </View>
 
           <TouchableOpacity
-            style={[styles.joinBtn, { marginTop: 8 }]}
+            style={[styles.joinBtn, { backgroundColor: '#059669', marginTop: 4 }]}
+            onPress={() => {
+              if (typeof window === 'undefined') return;
+              const [h, m] = bookConfirmed.time.split(':').map(Number);
+              const dateStr = bookConfirmed.date.replace(/-/g, '');
+              const pad = (n: number) => String(n).padStart(2, '0');
+              const dtStart = `${dateStr}T${pad(h)}${pad(m)}00`;
+              const endH = Math.floor((h * 60 + m + 30) / 60);
+              const endM = (h * 60 + m + 30) % 60;
+              const dtEnd = `${dateStr}T${pad(endH)}${pad(endM)}00`;
+              const ics = [
+                'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//OmniQueue//EN',
+                'BEGIN:VEVENT',
+                `DTSTART:${dtStart}`,
+                `DTEND:${dtEnd}`,
+                `SUMMARY:${bookConfirmed.serviceName} at ${business!.name}`,
+                `DESCRIPTION:Appointment for ${bookConfirmed.customerName}`,
+                `LOCATION:${business!.name}`,
+                'END:VEVENT', 'END:VCALENDAR',
+              ].join('\r\n');
+              const blob = new Blob([ics], { type: 'text/calendar' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url; a.download = 'appointment.ics'; a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            <Text style={styles.joinBtnText}>📅 Save to Calendar</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.joinBtn, { marginTop: 4 }]}
             onPress={() => {
               setBookConfirmed(null);
               setBookDate(''); setBookTime(''); setBookStaffId('any');
