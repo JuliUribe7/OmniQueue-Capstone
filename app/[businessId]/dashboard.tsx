@@ -99,6 +99,11 @@ export default function BusinessDashboard() {
     visible: boolean; action: 'done' | 'remove' | 'call' | null; ticket: ApiTicket | null;
   }>({ visible: false, action: null, ticket: null });
 
+  // Message modal
+  const [messageModal, setMessageModal] = useState<{
+    visible: boolean; name: string; phone: string;
+  }>({ visible: false, name: '', phone: '' });
+
   // QR share state
   const [qrOpen, setQrOpen]             = useState(false);
   const [qrSmsPhone, setQrSmsPhone]     = useState('');
@@ -130,10 +135,7 @@ export default function BusinessDashboard() {
 
   // Appointments
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
-  const [apptView, setApptView] = useState<'today' | 'upcoming' | 'past'>('today');
-  const [calendarDate, setCalendarDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [calendarMonth, setCalendarMonth] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [calView, setCalView] = useState<'today' | 'week' | 'month'>('today');
 
   // Google Calendar
   const [googleConnected, setGoogleConnected]   = useState(false);
@@ -349,14 +351,22 @@ export default function BusinessDashboard() {
   }
 
   // ── Ticket card ────────────────────────────────────────────────────────────
-  function TicketCard({ item, compact = false }: { item: ApiTicket; compact?: boolean }) {
+  function TicketCard({ item, index = 0, compact = false }: { item: ApiTicket; index?: number; compact?: boolean }) {
     const isCalled = item.status === 'Called';
+    const joinedAt = (() => {
+      const d = new Date(item.createdAt);
+      const h = d.getHours(); const m = d.getMinutes();
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+    })();
+    const waitMins = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 60000);
     return (
       <View style={[styles.ticketCard, isCalled && styles.ticketCardCalled, compact && styles.ticketCardCompact,
         { backgroundColor: C.surface, borderColor: isCalled ? '#10b981' : C.border }]}>
         <View style={styles.ticketTop}>
           <View style={[styles.positionBadge, { backgroundColor: statusColor(item.status) }]}>
-            <Text style={styles.positionText}>#{item.position}</Text>
+            <Text style={styles.positionText}>#{index + 1}</Text>
           </View>
           <View style={styles.customerInfo}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -375,11 +385,13 @@ export default function BusinessDashboard() {
         <View style={styles.ticketMeta}>
           <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
           <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-          <Text style={[styles.metaText, { color: C.textSub }]}>🕐 {timeAgo(item.createdAt)}</Text>
+          <Text style={[styles.metaText, { color: C.textSub }]}>Joined {joinedAt}</Text>
+          <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+          <Text style={[styles.metaText, { color: C.textSub }]}>{waitMins}m waiting</Text>
           {!compact && (
             <>
               <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-              <Text style={[styles.metaText, { color: C.textSub }]}>⏱ ~{item.avgTime} min</Text>
+              <Text style={[styles.metaText, { color: C.textSub }]}>~{item.avgTime}m svc</Text>
             </>
           )}
         </View>
@@ -388,12 +400,18 @@ export default function BusinessDashboard() {
           <View style={styles.ticketActions}>
             {!isCalled && (
               <TouchableOpacity style={styles.callBtn} onPress={() => setConfirmModal({ visible: true, action: 'call', ticket: item })}>
-                <Text style={styles.callBtnText}>📣 Call</Text>
+                <Text style={styles.callBtnText}>▶ Serve</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.doneBtn} onPress={() => setConfirmModal({ visible: true, action: 'done', ticket: item })}>
               <Text style={styles.doneBtnText}>✓ Done</Text>
             </TouchableOpacity>
+            {item.phoneNumber ? (
+              <TouchableOpacity style={[styles.removeBtn, { borderColor: '#2563eb22', backgroundColor: '#eff6ff' }]}
+                onPress={() => setMessageModal({ visible: true, name: item.customerName, phone: item.phoneNumber })}>
+                <Text style={[styles.removeBtnText, { color: '#2563eb' }]}>✉ Message</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity style={[styles.removeBtn, { borderColor: C.border }]} onPress={() => setConfirmModal({ visible: true, action: 'remove', ticket: item })}>
               <Text style={[styles.removeBtnText, { color: C.textSub }]}>Remove</Text>
             </TouchableOpacity>
@@ -433,9 +451,9 @@ export default function BusinessDashboard() {
             <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No customers in queue</Text>
           </View>
         ) : (
-          preview.map(ticket => (
+          preview.map((ticket, i) => (
             <TouchableOpacity key={ticket.id} onPress={() => setActiveTab('queue')} activeOpacity={0.8}>
-              <TicketCard item={ticket} compact />
+              <TicketCard item={ticket} index={i} compact />
             </TouchableOpacity>
           ))
         )}
@@ -473,8 +491,8 @@ export default function BusinessDashboard() {
                   const svc = services.find(s => s.id === appt.serviceId);
                   const staffMember = staff.find(s => s.id === appt.staffId);
                   return (
-                    <TouchableOpacity key={appt.id} onPress={() => setActiveTab('appointments')} activeOpacity={0.8}>
-                      <View style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                    <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={styles.apptTimeCol}>
                           <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
                         </View>
@@ -489,7 +507,21 @@ export default function BusinessDashboard() {
                           <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                      {appt.phoneNumber ? (
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                          <TouchableOpacity
+                            style={{ flex: 1, backgroundColor: '#eff6ff', borderRadius: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderColor: '#2563eb22' }}
+                            onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>✉ Message</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ flex: 1, backgroundColor: C.surfaceAlt, borderRadius: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderColor: C.border }}
+                            onPress={() => setActiveTab('appointments')}>
+                            <Text style={{ fontSize: 12, fontWeight: '600', color: C.textSub }}>View All →</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
                   );
                 })
               )}
@@ -522,7 +554,7 @@ export default function BusinessDashboard() {
                 <Text style={styles.navBadgeText}>{liveTickets.length}</Text>
               </View>
             </View>
-            {liveTickets.map(item => <TicketCard key={item.id} item={item} />)}
+            {liveTickets.map((item, i) => <TicketCard key={item.id} item={item} index={i} />)}
           </>
         )}
 
@@ -1126,232 +1158,264 @@ export default function BusinessDashboard() {
 
   // ── Appointments tab ───────────────────────────────────────────────────────
   function renderAppointments() {
-    const todayKey = new Date().toISOString().split('T')[0];
+    const now      = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+    const HOUR_H  = 52;
+    const START_H = 8;
+    const END_H   = 19;
+    const TOTAL_H = (END_H - START_H) * HOUR_H;
+    const TIME_W  = 44;
+    const COLORS  = ['#2563eb', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4'];
+    const hours   = Array.from({ length: END_H - START_H }, (_, i) => START_H + i);
 
-    function formatTime(t: string) {
+    function fmtTime(t: string) {
       const [h, m] = t.split(':').map(Number);
       const ampm = h >= 12 ? 'PM' : 'AM';
       const h12  = h > 12 ? h - 12 : h === 0 ? 12 : h;
       return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
     }
-    function formatDayLabel(d: string) {
-      return new Date(d + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    function fmtHr(h: number) {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12  = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      return `${h12} ${ampm}`;
+    }
+    function dKey(d: Date) {
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     }
     function pad2(n: number) { return String(n).padStart(2, '0'); }
 
-    // Calendar grid
-    const year       = calendarMonth.getFullYear();
-    const month      = calendarMonth.getMonth();
-    const monthLabel = calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const firstDay   = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const apptDates  = new Set(appointments.map(a => a.date));
-    function dayKey(d: number) { return `${year}-${pad2(month + 1)}-${pad2(d)}`; }
-    const calCells: (number | null)[] = [
-      ...Array(firstDay).fill(null),
-      ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-    ];
-    while (calCells.length % 7 !== 0) calCells.push(null);
-    const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-    // Group appointments by date
     const byDate: Record<string, typeof appointments> = {};
     appointments.forEach(a => {
       if (!byDate[a.date]) byDate[a.date] = [];
       byDate[a.date].push(a);
     });
-    Object.values(byDate).forEach(arr => arr.sort((a, b) => a.time.localeCompare(b.time)));
 
-    const todayAppts    = byDate[todayKey] ?? [];
-    const upcomingDates = Object.keys(byDate).filter(d => d > todayKey).sort();
-    const pastDates     = Object.keys(byDate).filter(d => d < todayKey).sort().reverse();
-
-    function toggleDay(d: string) {
-      setExpandedDays(prev => {
-        const next = new Set(prev);
-        next.has(d) ? next.delete(d) : next.add(d);
-        return next;
-      });
+    function getWeekStart(d: Date): Date {
+      const n = new Date(d); n.setHours(0,0,0,0);
+      const day = n.getDay();
+      n.setDate(n.getDate() - (day === 0 ? 6 : day - 1));
+      return n;
+    }
+    function apptTop(time: string) {
+      const [h, m] = time.split(':').map(Number);
+      return ((h - START_H) + m / 60) * HOUR_H;
+    }
+    function apptH(serviceId: string) {
+      const svc = services.find(s => s.id === serviceId);
+      return Math.max(((svc?.avgTime ?? 30) / 60) * HOUR_H, 28);
     }
 
-    function ApptRow({ appt }: { appt: typeof appointments[0] }) {
-      const svc    = services.find(s => s.id === appt.serviceId);
-      const member = staff.find(s => s.id === appt.staffId);
+    // ── Today — simple card list ──
+    function TodayView() {
+      const dayAppts = (byDate[todayKey] ?? []).sort((a, b) => a.time.localeCompare(b.time));
+      if (dayAppts.length === 0) {
+        return (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 36, marginBottom: 10 }}>📅</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>No appointments today</Text>
+            <Text style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+              {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </Text>
+          </View>
+        );
+      }
       return (
-        <View style={[styles.apptCard, { backgroundColor: C.surfaceAlt, borderColor: C.border, marginTop: 8 }]}>
-          <View style={styles.apptTimeCol}>
-            <Text style={[styles.apptTime, { color: C.primary }]}>{formatTime(appt.time)}</Text>
-          </View>
-          <View style={styles.apptInfo}>
-            <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
-            <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
-            {member && <Text style={[styles.apptStaff, { color: C.textMuted }]}>with {member.name}</Text>}
-          </View>
-          {appt.phoneNumber ? <Text style={[styles.apptPhone, { color: C.textMuted }]}>{appt.phoneNumber}</Text> : null}
-        </View>
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }} showsVerticalScrollIndicator={false}>
+          <Text style={{ fontSize: 13, color: C.textMuted, marginBottom: 2 }}>
+            {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {dayAppts.length} appointment{dayAppts.length !== 1 ? 's' : ''}
+          </Text>
+          {dayAppts.map((appt, i) => {
+            const svc    = services.find(s => s.id === appt.serviceId);
+            const member = staff.find(s => s.id === appt.staffId);
+            const color  = COLORS[i % COLORS.length];
+            return (
+              <View key={appt.id} style={{ backgroundColor: C.surface, borderRadius: 12, padding: 14,
+                borderLeftWidth: 4, borderLeftColor: color,
+                shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2, gap: 4 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>{fmtTime(appt.time)}</Text>
+                  {svc && (
+                    <View style={{ backgroundColor: color + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color }}>{svc.name}</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: C.text }}>{appt.customerName}</Text>
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  {appt.phoneNumber ? <Text style={{ fontSize: 12, color: C.textMuted }}>📞 {appt.phoneNumber}</Text> : null}
+                  {member ? <Text style={{ fontSize: 12, color: C.textMuted }}>👤 {member.name}</Text> : null}
+                </View>
+                {appt.phoneNumber ? (
+                  <TouchableOpacity
+                    style={{ marginTop: 8, backgroundColor: color + '18', borderRadius: 8, paddingVertical: 7,
+                      alignItems: 'center', borderWidth: 1, borderColor: color + '40' }}
+                    onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color }}>✉ Message Customer</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            );
+          })}
+        </ScrollView>
       );
     }
 
-    function DayBox({ date, appts, accent = false }: { date: string; appts: typeof appointments; accent?: boolean }) {
-      const isOpen = expandedDays.has(date);
+    // ── This Week — time grid anchored to current week ──
+    function WeekView() {
+      const ws       = getWeekStart(now);
+      const weekDays = Array.from({ length: 7 }, (_, i) => { const d = new Date(ws); d.setDate(ws.getDate() + i); return d; });
+      const DLABELS  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return (
-        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: accent ? C.primary : C.border, borderWidth: accent ? 1.5 : 1, padding: 0, overflow: 'hidden' }]}>
-          <TouchableOpacity
-            style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14 }}
-            onPress={() => toggleDay(date)}
-            activeOpacity={0.7}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>{formatDayLabel(date)}</Text>
-              <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 2 }}>
-                {appts.length} appointment{appts.length !== 1 ? 's' : ''} · {appts.map(a => {
-                  const svc = services.find(s => s.id === a.serviceId);
-                  return `${formatTime(a.time)} ${svc?.name ?? ''}`;
-                }).join(' · ')}
-              </Text>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View style={{ flexDirection: 'row', paddingLeft: TIME_W, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.surface }}>
+            {weekDays.map((d, i) => {
+              const isToday = dKey(d) === todayKey;
+              return (
+                <View key={i} style={{ flex: 1, alignItems: 'center', paddingVertical: 7 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: C.textMuted }}>{DLABELS[i]}</Text>
+                  <View style={{ width: 24, height: 24, borderRadius: 12, marginTop: 2,
+                    backgroundColor: isToday ? C.primary : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: isToday ? '#fff' : C.text }}>{d.getDate()}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+          <View style={{ flexDirection: 'row' }}>
+            <View style={{ width: TIME_W }}>
+              {hours.map(h => (
+                <View key={h} style={{ height: HOUR_H, paddingTop: 4 }}>
+                  <Text style={{ fontSize: 9, color: C.textMuted, textAlign: 'right', paddingRight: 6 }}>{fmtHr(h)}</Text>
+                </View>
+              ))}
             </View>
-            <Text style={{ fontSize: 16, color: C.textMuted, marginLeft: 8 }}>{isOpen ? '▲' : '▼'}</Text>
-          </TouchableOpacity>
-          {isOpen && (
-            <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-              {appts.map(appt => <ApptRow key={appt.id} appt={appt} />)}
-            </View>
-          )}
-        </View>
+            {weekDays.map((d, di) => {
+              const key      = dKey(d);
+              const dayAppts = (byDate[key] ?? []).sort((a, b) => a.time.localeCompare(b.time));
+              return (
+                <View key={di} style={{ flex: 1, height: TOTAL_H, position: 'relative', borderLeftWidth: 0.5, borderLeftColor: C.border }}>
+                  {hours.map(h => (
+                    <View key={h} style={{ position: 'absolute', top: (h - START_H) * HOUR_H, left: 0, right: 0, height: 0.5, backgroundColor: C.border }} />
+                  ))}
+                  {dayAppts.map((appt, i) => {
+                    const svc   = services.find(s => s.id === appt.serviceId);
+                    const color = COLORS[i % COLORS.length];
+                    return (
+                      <View key={appt.id} style={{ position: 'absolute', top: apptTop(appt.time),
+                        left: 1, right: 1, height: apptH(appt.serviceId),
+                        backgroundColor: color + '22', borderLeftWidth: 2, borderLeftColor: color,
+                        borderRadius: 3, padding: 3, overflow: 'hidden' }}>
+                        <Text numberOfLines={1} style={{ fontSize: 9, fontWeight: '700', color }}>{fmtTime(appt.time)}</Text>
+                        <Text numberOfLines={1} style={{ fontSize: 9, color: C.text }}>{appt.customerName}</Text>
+                        {svc && <Text numberOfLines={1} style={{ fontSize: 8, color: C.textMuted }}>{svc.name}</Text>}
+                      </View>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
       );
     }
 
-    return (
-      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-
-        {/* Google Calendar status */}
-        <TouchableOpacity
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 10,
-            backgroundColor: googleConnected ? '#f0fdf4' : C.surface,
-            borderRadius: 10, padding: 12, borderWidth: 1,
-            borderColor: googleConnected ? '#10b981' : C.border }}
-          onPress={() => setActiveTab('settings')}
-          activeOpacity={0.8}
-        >
-          <Text style={{ fontSize: 16 }}>🗓</Text>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: googleConnected ? '#065f46' : C.textSub, flex: 1 }}>
-            {googleConnected ? 'Google Calendar connected — appointments sync automatically' : 'Connect Google Calendar in Settings'}
+    // ── This Month — full calendar grid anchored to current month ──
+    function MonthView() {
+      const year        = now.getFullYear();
+      const month       = now.getMonth();
+      const firstDay    = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const offset      = firstDay === 0 ? 6 : firstDay - 1;
+      function mDayKey(d: number) { return `${year}-${pad2(month+1)}-${pad2(d)}`; }
+      const calCells: (number | null)[] = [
+        ...Array(offset).fill(null),
+        ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+      ];
+      while (calCells.length % 7 !== 0) calCells.push(null);
+      const DLABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return (
+        <ScrollView contentContainerStyle={{ padding: 8 }} showsVerticalScrollIndicator={false}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 8 }}>
+            {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </Text>
-          <Text style={{ fontSize: 12, color: googleConnected ? '#10b981' : C.primary, fontWeight: '600' }}>
-            {googleConnected ? '✓' : 'Connect →'}
-          </Text>
-        </TouchableOpacity>
-
-        {/* Calendar grid */}
-        <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border, padding: 12 }]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <TouchableOpacity onPress={() => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() - 1, 1))} style={{ padding: 6 }}>
-              <Text style={{ fontSize: 20, color: C.primary, fontWeight: '700' }}>‹</Text>
-            </TouchableOpacity>
-            <Text style={{ fontSize: 15, fontWeight: '700', color: C.text }}>{monthLabel}</Text>
-            <TouchableOpacity onPress={() => setCalendarMonth(m => new Date(m.getFullYear(), m.getMonth() + 1, 1))} style={{ padding: 6 }}>
-              <Text style={{ fontSize: 20, color: C.primary, fontWeight: '700' }}>›</Text>
-            </TouchableOpacity>
-          </View>
-
           <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-            {DAY_LABELS.map(d => (
-              <View key={d} style={{ flex: 1, alignItems: 'center' }}>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: C.textMuted }}>{d}</Text>
+            {DLABELS.map(d => (
+              <View key={d} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: C.textMuted }}>{d}</Text>
               </View>
             ))}
           </View>
-
           {Array.from({ length: calCells.length / 7 }, (_, row) => (
             <View key={row} style={{ flexDirection: 'row' }}>
               {calCells.slice(row * 7, row * 7 + 7).map((day, col) => {
-                if (!day) return (
-                  <View key={col} style={{ flex: 1, minHeight: 52, borderWidth: 0.5, borderColor: C.border, opacity: 0.3 }} />
-                );
-                const key      = dayKey(day);
+                if (!day) return <View key={col} style={{ flex: 1, minHeight: 72, borderWidth: 0.5, borderColor: C.border, backgroundColor: C.surfaceAlt, opacity: 0.3 }} />;
+                const key      = mDayKey(day);
                 const isToday  = key === todayKey;
-                const selected = key === calendarDate;
                 const dayAppts = byDate[key] ?? [];
                 return (
-                  <TouchableOpacity
-                    key={col}
-                    style={{ flex: 1, minHeight: 52, borderWidth: 0.5, borderColor: C.border,
-                      backgroundColor: selected ? C.primary + '18' : isToday ? C.primary + '08' : 'transparent',
-                      padding: 4 }}
-                    onPress={() => { setCalendarDate(key); toggleDay(key); setApptView('today'); }}
-                  >
-                    <View style={{
-                      width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+                  <View key={col} style={{ flex: 1, minHeight: 72, borderWidth: 0.5, borderColor: C.border,
+                    padding: 3, backgroundColor: isToday ? C.primary + '12' : C.surface }}>
+                    <View style={{ width: 20, height: 20, borderRadius: 10,
                       backgroundColor: isToday ? C.primary : 'transparent',
-                    }}>
-                      <Text style={{ fontSize: 12, fontWeight: isToday ? '700' : '400',
-                        color: isToday ? '#fff' : selected ? C.primary : C.text }}>
-                        {day}
-                      </Text>
+                      alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
+                      <Text style={{ fontSize: 11, fontWeight: isToday ? '700' : '400', color: isToday ? '#fff' : C.text }}>{day}</Text>
                     </View>
                     {dayAppts.slice(0, 2).map((a, i) => {
-                      const svc = services.find(s => s.id === a.serviceId);
+                      const color = COLORS[i % COLORS.length];
+                      const svc   = services.find(s => s.id === a.serviceId);
                       return (
-                        <Text key={i} numberOfLines={1} style={{ fontSize: 9, color: '#fff',
-                          backgroundColor: C.primary, borderRadius: 3, paddingHorizontal: 3,
-                          marginTop: 2, overflow: 'hidden' }}>
-                          {formatTime(a.time)} {svc?.name ?? ''}
-                        </Text>
+                        <View key={a.id} style={{ backgroundColor: color + '22', borderLeftWidth: 2,
+                          borderLeftColor: color, borderRadius: 2, paddingHorizontal: 2, paddingVertical: 1, marginBottom: 1 }}>
+                          <Text numberOfLines={1} style={{ fontSize: 7, color, fontWeight: '600' }}>
+                            {fmtTime(a.time)} {svc?.name ?? ''}
+                          </Text>
+                        </View>
                       );
                     })}
-                    {dayAppts.length > 2 && (
-                      <Text style={{ fontSize: 9, color: C.textMuted, marginTop: 1 }}>+{dayAppts.length - 2} more</Text>
-                    )}
-                  </TouchableOpacity>
+                    {dayAppts.length > 2 && <Text style={{ fontSize: 7, color: C.textMuted }}>+{dayAppts.length - 2}</Text>}
+                  </View>
                 );
               })}
             </View>
           ))}
-        </View>
+        </ScrollView>
+      );
+    }
 
-        {/* Section toggle */}
-        <View style={{ flexDirection: 'row', backgroundColor: C.surfaceAlt, borderRadius: 10, padding: 4 }}>
-          {([
-            { key: 'today',    label: `Today (${todayAppts.length})` },
-            { key: 'upcoming', label: `Upcoming (${upcomingDates.reduce((s, d) => s + (byDate[d]?.length ?? 0), 0)})` },
-            { key: 'past',     label: `Past (${pastDates.reduce((s, d) => s + (byDate[d]?.length ?? 0), 0)})` },
-          ] as { key: 'today' | 'upcoming' | 'past'; label: string }[]).map(({ key, label }) => (
-            <TouchableOpacity key={key} style={{ flex: 1, paddingVertical: 8, borderRadius: 8, alignItems: 'center',
-              backgroundColor: apptView === key ? C.surface : 'transparent' }}
-              onPress={() => setApptView(key)}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: apptView === key ? C.text : C.textMuted }}>{label}</Text>
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg }}>
+
+        {/* Tab switcher — Today / This Week / This Month */}
+        <View style={{ flexDirection: 'row', backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.border }}>
+          {([['today', 'Today'], ['week', 'This Week'], ['month', 'This Month']] as const).map(([v, label]) => (
+            <TouchableOpacity key={v} onPress={() => setCalView(v)}
+              style={{ flex: 1, paddingVertical: 13, alignItems: 'center',
+                borderBottomWidth: 2, borderBottomColor: calView === v ? C.primary : 'transparent' }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: calView === v ? C.primary : C.textMuted }}>{label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Today */}
-        {apptView === 'today' && (
-          todayAppts.length === 0
-            ? <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
-                <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No appointments today</Text>
-              </View>
-            : todayAppts.map(appt => <ApptRow key={appt.id} appt={appt} />)
-        )}
+        {/* Views */}
+        <View style={{ flex: 1 }}>
+          {calView === 'today' && <TodayView />}
+          {calView === 'week'  && <WeekView />}
+          {calView === 'month' && <MonthView />}
+        </View>
 
-        {/* Upcoming */}
-        {apptView === 'upcoming' && (
-          upcomingDates.length === 0
-            ? <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
-                <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No upcoming appointments</Text>
-              </View>
-            : upcomingDates.map(d => <DayBox key={d} date={d} appts={byDate[d]} accent />)
-        )}
-
-        {/* Past */}
-        {apptView === 'past' && (
-          pastDates.length === 0
-            ? <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
-                <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No past appointments</Text>
-              </View>
-            : pastDates.map(d => <DayBox key={d} date={d} appts={byDate[d]} />)
-        )}
-
-      </ScrollView>
+        {/* Google Calendar status — bottom */}
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10,
+            backgroundColor: googleConnected ? '#f0fdf4' : C.surface,
+            borderTopWidth: 1, borderTopColor: googleConnected ? '#bbf7d0' : C.border }}
+          onPress={() => setActiveTab('settings')} activeOpacity={0.8}>
+          <Text style={{ fontSize: 14 }}>🗓</Text>
+          <Text style={{ fontSize: 12, fontWeight: '600', flex: 1, color: googleConnected ? '#065f46' : C.textSub }}>
+            {googleConnected ? 'Google Calendar connected' : 'Connect Google Calendar in Settings →'}
+          </Text>
+          {googleConnected && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#10b981' }} />}
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -1693,6 +1757,47 @@ export default function BusinessDashboard() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Message modal */}
+      <Modal visible={messageModal.visible} transparent animationType="fade"
+        onRequestClose={() => setMessageModal({ visible: false, name: '', phone: '' })}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1}
+          onPress={() => setMessageModal({ visible: false, name: '', phone: '' })}>
+          <TouchableOpacity activeOpacity={1} onPress={() => {}}>
+            <View style={[styles.modalBox, { backgroundColor: C.surface, width: 300 }]}>
+              <Text style={[styles.modalTitle, { color: C.text }]}>Message Customer</Text>
+              <Text style={[styles.modalBody, { color: C.textSub, marginBottom: 16 }]}>
+                {messageModal.name} · {messageModal.phone}
+              </Text>
+              <TouchableOpacity
+                style={[styles.addBtn, { backgroundColor: '#10b981', marginBottom: 10 }]}
+                onPress={() => {
+                  const cleaned = messageModal.phone.replace(/\D/g, '');
+                  if (typeof window !== 'undefined') window.open(`sms:${cleaned}`, '_self');
+                  setMessageModal({ visible: false, name: '', phone: '' });
+                }}
+              >
+                <Text style={styles.addBtnText}>💬 Send SMS</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.addBtn, { backgroundColor: '#2563eb', marginBottom: 10 }]}
+                onPress={() => {
+                  const subject = encodeURIComponent('Your appointment update');
+                  const body = encodeURIComponent(`Hi ${messageModal.name}, we wanted to reach out about your visit.`);
+                  if (typeof window !== 'undefined') window.open(`mailto:?subject=${subject}&body=${body}`, '_self');
+                  setMessageModal({ visible: false, name: '', phone: '' });
+                }}
+              >
+                <Text style={styles.addBtnText}>✉ Send Email</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalCancelBtn, { borderColor: C.border, alignItems: 'center' }]}
+                onPress={() => setMessageModal({ visible: false, name: '', phone: '' })}>
+                <Text style={[styles.modalCancelText, { color: C.textSub }]}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
     </SafeAreaView>
