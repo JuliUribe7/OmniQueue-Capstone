@@ -143,20 +143,32 @@ export default function BusinessDashboard() {
   const [googleSaved, setGoogleSaved]           = useState(false);
 
   // Subscription plan
-  const [plan, setPlan] = useState<'basic' | 'pro'>('pro');
+  const [plan, setPlan] = useState<'basic' | 'pro'>('basic');
 
   // Stripe checkout state
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutError, setCheckoutError]     = useState('');
+  const [stripeSuccess, setStripeSuccess]     = useState(false);
 
-  // ── Handle Google OAuth callback tokens in URL ─────────────────────────────
+  // ── Handle URL params (Google OAuth callback + Stripe success) ────────────
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const rawTokens = params.get('google_tokens');
+    const isSuccess = params.get('success') === 'true';
+
+    // Stripe success — plan is now pro
+    if (isSuccess) {
+      setPlan('pro');
+      setStripeSuccess(true);
+      setTimeout(() => setStripeSuccess(false), 6000);
+    }
+
     if (!rawTokens) {
       // Just check current status
       api.getGoogleStatus().then(r => setGoogleConnected(r.connected)).catch(() => {});
+      const clean = window.location.pathname;
+      if (isSuccess) window.history.replaceState({}, '', clean);
       return;
     }
     // Tokens came back from Google OAuth — save them then clean the URL
@@ -180,14 +192,12 @@ export default function BusinessDashboard() {
           { services: svcs },
           { tickets: tix },
           staffRes,
-          subRes,
           apptRes,
         ] = await Promise.all([
           api.getMyBusiness(),
           api.getServices(),
           api.getQueue(),
           api.getStaff().catch(() => ({ staff: [] })),
-          Promise.resolve({ plan: 'pro' as const }),
           api.getMyAppointments().catch(() => ({ appointments: [] })),
         ]);
         if (cancelled) return;
@@ -195,7 +205,7 @@ export default function BusinessDashboard() {
         setServices(svcs);
         setTickets(tix);
         setStaff(staffRes.staff);
-        setPlan('pro'); // hardcoded for testing — switch back to subRes.plan when Stripe is ready
+        setPlan(biz.plan ?? 'basic');
         setAppointments(apptRes.appointments);
         if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
       } catch {
@@ -491,7 +501,7 @@ export default function BusinessDashboard() {
                   const svc = services.find(s => s.id === appt.serviceId);
                   const staffMember = staff.find(s => s.id === appt.staffId);
                   return (
-                    <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                    <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', alignItems: 'stretch' }]}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <View style={styles.apptTimeCol}>
                           <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
@@ -1023,11 +1033,12 @@ export default function BusinessDashboard() {
   // ── Subscription tab ────────────────────────────────────────────────────────
   function renderSubscription() {
     async function handleUpgrade() {
-      if (!business) return;
+      const biz = business;
+      if (!biz) return;
       setCheckoutLoading(true);
       setCheckoutError('');
       try {
-        const { url } = await api.createCheckoutSession(business.name, businessId as string);
+        const { url } = await api.createCheckoutSession(biz.name, biz.id);
         if (typeof window !== 'undefined') window.location.href = url;
       } catch (e: any) {
         setCheckoutError(e?.message ?? 'Could not start checkout. Please try again.');
@@ -1078,6 +1089,13 @@ export default function BusinessDashboard() {
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        {stripeSuccess && (
+          <View style={[styles.successBanner, { backgroundColor: '#d1fae5', marginBottom: 12 }]}>
+            <Text style={[styles.successText, { color: '#065f46', fontSize: 15 }]}>
+              🎉 You're now on Pro! All features unlocked.
+            </Text>
+          </View>
+        )}
         <Text style={[styles.sectionTitle, { color: C.text }]}>Subscription Plan</Text>
         <Text style={[styles.sectionSub, { color: C.textMuted }]}>
           Current plan:{' '}

@@ -21,6 +21,7 @@ export interface ApiBusiness {
   userId: string;
   name: string;
   type: string;
+  plan: 'basic' | 'pro';
   createdAt: string;
   updatedAt: string;
 }
@@ -143,10 +144,10 @@ export const api = {
     apiFetch('/api/businesses/me/subscription', { method: 'PUT', body: JSON.stringify({ plan }) }),
 
   // Stripe
-  createCheckoutSession: (businessName: string, businessId: string): Promise<{ url: string }> =>
+  createCheckoutSession: (businessName: string, businessId: string, email?: string): Promise<{ url: string }> =>
     apiFetch('/api/payments/create-checkout', {
       method: 'POST',
-      body: JSON.stringify({ businessName, businessId }),
+      body: JSON.stringify({ businessName, businessId, email }),
     }),
 
   // Google Calendar
