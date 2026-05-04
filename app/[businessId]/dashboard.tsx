@@ -157,11 +157,12 @@ export default function BusinessDashboard() {
     const rawTokens = params.get('google_tokens');
     const isSuccess = params.get('success') === 'true';
 
-    // Stripe success — plan is now pro
+    // Stripe success — persist pro to DB and show banner
     if (isSuccess) {
       setPlan('pro');
       setStripeSuccess(true);
       setTimeout(() => setStripeSuccess(false), 6000);
+      api.updateSubscription('pro').catch(() => {});
     }
 
     if (!rawTokens) {
@@ -205,7 +206,9 @@ export default function BusinessDashboard() {
         setServices(svcs);
         setTickets(tix);
         setStaff(staffRes.staff);
-        setPlan(biz.plan ?? 'basic');
+        // Don't overwrite plan if ?success=true just fired — updateSubscription is in-flight
+        const successParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('success') === 'true';
+        if (!successParam) setPlan(biz.plan ?? 'basic');
         setAppointments(apptRes.appointments);
         if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
       } catch {
