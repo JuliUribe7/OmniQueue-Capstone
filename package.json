@@ -2,6 +2,11 @@
   "name": "omniqueue-customer-portal",
   "version": "1.0.0",
   "main": "expo-router/entry",
+  "expo": {
+    "web": {
+      "output": "single"
+    }
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
