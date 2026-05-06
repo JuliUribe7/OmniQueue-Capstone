@@ -125,13 +125,13 @@ export const api = {
     apiFetch(`/api/businesses/${businessId}/staff`),
 
   // Appointments (public — customer-facing)
-  createAppointment: (businessId: string, serviceId: string, staffId: string, customerName: string, phoneNumber: string, date: string, time: string): Promise<{ appointment: ApiAppointment }> =>
+  createAppointment: (businessId: string, serviceId: string, staffId: string, customerName: string, phoneNumber: string, date: string, time: string, customerEmail?: string): Promise<{ appointment: ApiAppointment }> =>
     apiFetch(`/api/businesses/${businessId}/appointments`, {
       method: 'POST',
-      body: JSON.stringify({ serviceId, staffId, customerName, phoneNumber, date, time }),
+      body: JSON.stringify({ serviceId, staffId, customerName, phoneNumber, date, time, customerEmail }),
     }),
-  getPublicAppointments: (businessId: string, date: string): Promise<{ bookedSlots: { time: string; count: number }[] }> =>
-    apiFetch(`/api/businesses/${businessId}/appointments/public?date=${encodeURIComponent(date)}`),
+  getPublicAppointments: (businessId: string, date: string, staffId?: string): Promise<{ bookedSlots: { time: string; count: number }[] }> =>
+    apiFetch(`/api/businesses/${businessId}/appointments/public?date=${encodeURIComponent(date)}${staffId ? `&staffId=${encodeURIComponent(staffId)}` : ''}`),
 
   // Appointments (auth — staff dashboard)
   getMyAppointments: (): Promise<{ appointments: ApiAppointment[] }> =>

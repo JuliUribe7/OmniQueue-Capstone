@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
+  SafeAreaView, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -41,7 +41,6 @@ function formatTime(t: string): string {
   return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
 }
 
-
 export default function CustomerPortal() {
   const router = useRouter();
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -71,18 +70,20 @@ export default function CustomerPortal() {
   const [bookStaffId, setBookStaffId]     = useState('any');
   const [bookName, setBookName]           = useState('');
   const [bookPhone, setBookPhone]         = useState('');
+  const [bookEmail, setBookEmail]         = useState('');
   const [bookError, setBookError]         = useState('');
   const [bookConfirmed, setBookConfirmed] = useState<ConfirmedBooking | null>(null);
   const [booking, setBooking]             = useState(false);
   const [calMonth, setCalMonth]           = useState<Date>(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
 
-  // Fetch booked slots from backend when date changes
+  // Fetch booked slots — re-runs when date or selected staff changes
   useEffect(() => {
     if (!bookDate || !businessId) return;
-    api.getPublicAppointments(businessId, bookDate)
+    const staffParam = bookStaffId !== 'any' ? bookStaffId : undefined;
+    api.getPublicAppointments(businessId, bookDate, staffParam)
       .then(({ bookedSlots: slots }) => setBookedSlots(slots))
       .catch(() => setBookedSlots([]));
-  }, [bookDate, businessId]);
+  }, [bookDate, businessId, bookStaffId]);
 
   useEffect(() => {
     api.getPublicBusiness(businessId)
@@ -129,7 +130,7 @@ export default function CustomerPortal() {
     setJoinError('');
     setJoining(true);
     try {
-      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id, email.trim());
+      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id, email.trim() || undefined);
       router.push(`/${businessId}/waiting?token=${token}`);
     } catch (e: any) {
       setJoinError(e?.message ?? 'Could not join queue. Please try again.');
@@ -145,6 +146,7 @@ export default function CustomerPortal() {
   function isSlotAvailable(_date: string, time: string): boolean {
     const slot = bookedSlots.find(s => s.time === time);
     const booked = slot?.count ?? 0;
+    if (bookStaffId !== 'any') return booked < 1;
     const maxCap = staffList.length > 0 ? staffList.length : 1;
     return booked < maxCap;
   }
@@ -167,6 +169,7 @@ export default function CustomerPortal() {
         bookPhone.trim(),
         bookDate,
         bookTime,
+        bookEmail.trim() || undefined,
       );
       setBookConfirmed({
         id: appointment.id,
@@ -180,12 +183,9 @@ export default function CustomerPortal() {
         phoneNumber: bookPhone.trim(),
         createdAt: appointment.createdAt,
       });
-      // Immediately mark this slot as taken so no other customer can double-book
       setBookedSlots(prev => {
         const existing = prev.find(s => s.time === bookTime);
-        if (existing) {
-          return prev.map(s => s.time === bookTime ? { ...s, count: s.count + 1 } : s);
-        }
+        if (existing) return prev.map(s => s.time === bookTime ? { ...s, count: s.count + 1 } : s);
         return [...prev, { time: bookTime, count: 1 }];
       });
     } catch (e: any) {
@@ -274,13 +274,56 @@ export default function CustomerPortal() {
             onPress={() => {
               setBookConfirmed(null);
               setBookDate(''); setBookTime(''); setBookStaffId('any');
-              setBookName(''); setBookPhone('');
+              setBookName(''); setBookPhone(''); setBookEmail('');
             }}
           >
             <Text style={styles.joinBtnText}>Book Another Appointment</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+    );
+  }
+
+  // ── Staff avatar row (shared by both modes) ───────────────────────────────
+  function StaffPicker({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
+    if (staffList.length === 0) return null;
+    return (
+      <>
+        <Text style={styles.fieldLabel}>Choose a Staff Member</Text>
+        <View style={styles.staffAvatarWrap}>
+          {/* Any Available */}
+          <TouchableOpacity
+            style={[styles.staffAvatarItem, selected === 'any' && styles.staffAvatarItemSelected]}
+            onPress={() => onSelect('any')}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.staffAvatarFallback, { backgroundColor: selected === 'any' ? '#2563eb' : '#e5e7eb' }]}>
+              <Text style={{ fontSize: 22 }}>👥</Text>
+            </View>
+            <Text style={[styles.staffAvatarName, selected === 'any' && styles.staffAvatarNameSelected]}>Any</Text>
+          </TouchableOpacity>
+
+          {staffList.map(s => (
+            <TouchableOpacity
+              key={s.id}
+              style={[styles.staffAvatarItem, selected === s.id && styles.staffAvatarItemSelected]}
+              onPress={() => onSelect(s.id)}
+              activeOpacity={0.7}
+            >
+              {s.photoUrl ? (
+                <Image source={{ uri: s.photoUrl }} style={styles.staffAvatarCircle} />
+              ) : (
+                <View style={[styles.staffAvatarFallback, { backgroundColor: selected === s.id ? '#2563eb' : '#e5e7eb' }]}>
+                  <Text style={[styles.staffAvatarInitial, { color: selected === s.id ? '#fff' : '#374151' }]}>
+                    {s.name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <Text style={[styles.staffAvatarName, selected === s.id && styles.staffAvatarNameSelected]}>{s.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </>
     );
   }
 
@@ -317,18 +360,7 @@ export default function CustomerPortal() {
               <Text style={styles.cardTitle}>Join the Queue</Text>
               <Text style={styles.cardSub}>Enter your info and we'll hold your spot.</Text>
 
-              <Text style={styles.fieldLabel}>Your Name</Text>
-              <TextInput style={styles.input} value={name} onChangeText={setName}
-                placeholder="First and last name" placeholderTextColor="#9ca3af" autoCapitalize="words" />
-
-              <Text style={styles.fieldLabel}>Phone Number</Text>
-              <TextInput style={styles.input} value={phone} onChangeText={setPhone}
-                placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
-
-              <Text style={styles.fieldLabel}>Email (optional)</Text>
-              <TextInput style={styles.input} value={email} onChangeText={setEmail}
-                placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
-              <Text style={styles.fieldHint}>We'll notify you when it's your turn.</Text>
+              <StaffPicker selected={staffId} onSelect={setStaffId} />
 
               <Text style={styles.fieldLabel}>Choose a Service</Text>
               <View style={styles.chipWrap}>
@@ -342,31 +374,18 @@ export default function CustomerPortal() {
                 ))}
               </View>
 
-              {staffList.length > 0 && (
-                <>
-                  <Text style={styles.fieldLabel}>Choose Staff (optional)</Text>
-                  <View style={styles.chipWrap}>
-                    <TouchableOpacity
-                      style={[styles.chip, staffId === 'any' && styles.chipSelected]}
-                      onPress={() => setStaffId('any')} activeOpacity={0.7}>
-                      <Text style={[styles.chipName, staffId === 'any' && styles.chipNameSelected]}>Any Available</Text>
-                    </TouchableOpacity>
-                    {staffList.map(s => (
-                      <TouchableOpacity key={s.id}
-                        style={[styles.chip, staffId === s.id && styles.chipSelected]}
-                        onPress={() => setStaffId(s.id)} activeOpacity={0.7}>
-                        <View style={[styles.staffInitial, { backgroundColor: staffId === s.id ? '#2563eb' : '#e5e7eb' }]}>
-                          <Text style={[styles.staffInitialText, { color: staffId === s.id ? '#fff' : '#374151' }]}>
-                            {s.name.charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-                        <Text style={[styles.chipName, staffId === s.id && styles.chipNameSelected]}>{s.name}</Text>
-                        <Text style={[styles.chipTime, staffId === s.id && styles.chipTimeSelected]}>{s.role}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
+              <Text style={styles.fieldLabel}>Your Name</Text>
+              <TextInput style={styles.input} value={name} onChangeText={setName}
+                placeholder="First and last name" placeholderTextColor="#9ca3af" autoCapitalize="words" />
+
+              <Text style={styles.fieldLabel}>Phone Number</Text>
+              <TextInput style={styles.input} value={phone} onChangeText={setPhone}
+                placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+
+              <Text style={styles.fieldLabel}>Email (optional)</Text>
+              <TextInput style={styles.input} value={email} onChangeText={setEmail}
+                placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
+              <Text style={styles.fieldHint}>We'll notify you when it's your turn.</Text>
 
               {!!joinError && <Text style={styles.errorText}>{joinError}</Text>}
 
@@ -382,6 +401,11 @@ export default function CustomerPortal() {
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Book an Appointment</Text>
               <Text style={styles.cardSub}>Pick a date and time that works for you.</Text>
+
+              <StaffPicker
+                selected={bookStaffId}
+                onSelect={(id) => { setBookStaffId(id); setBookDate(''); setBookTime(''); }}
+              />
 
               {/* Service */}
               <Text style={styles.fieldLabel}>Choose a Service</Text>
@@ -399,7 +423,6 @@ export default function CustomerPortal() {
               {/* Date picker — month calendar grid */}
               <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Choose a Date</Text>
               <View style={styles.calGrid}>
-                {/* Month nav */}
                 <View style={styles.calNav}>
                   <TouchableOpacity
                     onPress={() => {
@@ -426,13 +449,11 @@ export default function CustomerPortal() {
                     <Text style={styles.calNavArrow}>›</Text>
                   </TouchableOpacity>
                 </View>
-                {/* Day of week headers */}
                 <View style={styles.calRow}>
                   {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
                     <Text key={d} style={styles.calDowLabel}>{d}</Text>
                   ))}
                 </View>
-                {/* Day cells */}
                 {(() => {
                   const today = new Date(); today.setHours(0,0,0,0);
                   const maxDate = new Date(today); maxDate.setDate(today.getDate() + 60);
@@ -501,34 +522,7 @@ export default function CustomerPortal() {
                 </>
               )}
 
-              {/* Staff selection */}
-              {!!bookTime && staffList.length > 0 && (
-                <>
-                  <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Choose Staff (optional)</Text>
-                  <View style={styles.chipWrap}>
-                    <TouchableOpacity
-                      style={[styles.chip, bookStaffId === 'any' && styles.chipSelected]}
-                      onPress={() => setBookStaffId('any')} activeOpacity={0.7}>
-                      <Text style={[styles.chipName, bookStaffId === 'any' && styles.chipNameSelected]}>Any Available</Text>
-                    </TouchableOpacity>
-                    {staffList.map(s => (
-                      <TouchableOpacity key={s.id}
-                        style={[styles.chip, bookStaffId === s.id && styles.chipSelected]}
-                        onPress={() => setBookStaffId(s.id)} activeOpacity={0.7}>
-                        <View style={[styles.staffInitial, { backgroundColor: bookStaffId === s.id ? '#2563eb' : '#e5e7eb' }]}>
-                          <Text style={[styles.staffInitialText, { color: bookStaffId === s.id ? '#fff' : '#374151' }]}>
-                            {s.name.charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
-                        <Text style={[styles.chipName, bookStaffId === s.id && styles.chipNameSelected]}>{s.name}</Text>
-                        <Text style={[styles.chipTime, bookStaffId === s.id && styles.chipTimeSelected]}>{s.role}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
-
-              {/* Customer info — shown after date+time selected */}
+              {/* Customer info — shown after time selected */}
               {!!bookTime && (
                 <>
                   <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Your Name</Text>
@@ -538,6 +532,10 @@ export default function CustomerPortal() {
                   <Text style={styles.fieldLabel}>Phone Number</Text>
                   <TextInput style={styles.input} value={bookPhone} onChangeText={setBookPhone}
                     placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+
+                  <Text style={styles.fieldLabel}>Email (optional)</Text>
+                  <TextInput style={styles.input} value={bookEmail} onChangeText={setBookEmail}
+                    placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
                   <Text style={styles.fieldHint}>We'll send you a reminder on the day of your appointment.</Text>
 
                   {!!bookError && <Text style={styles.errorText}>{bookError}</Text>}
@@ -593,8 +591,15 @@ const styles = StyleSheet.create({
   chipTime: { fontSize: 12, color: '#9ca3af', marginTop: 2 },
   chipTimeSelected: { color: '#3b82f6' },
 
-  staffInitial: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
-  staffInitialText: { fontSize: 13, fontWeight: '700' },
+  // Staff avatar picker
+  staffAvatarWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
+  staffAvatarItem: { alignItems: 'center', gap: 6, padding: 8, borderRadius: 12, borderWidth: 2, borderColor: 'transparent', minWidth: 72 },
+  staffAvatarItemSelected: { borderColor: '#2563eb', backgroundColor: '#eff6ff' },
+  staffAvatarCircle: { width: 60, height: 60, borderRadius: 30 },
+  staffAvatarFallback: { width: 60, height: 60, borderRadius: 30, alignItems: 'center', justifyContent: 'center' },
+  staffAvatarInitial: { fontSize: 24, fontWeight: '700' },
+  staffAvatarName: { fontSize: 12, fontWeight: '600', color: '#374151', textAlign: 'center', maxWidth: 72 },
+  staffAvatarNameSelected: { color: '#2563eb' },
 
   calGrid: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: BorderRadius.lg, overflow: 'hidden', marginTop: 4 },
   calNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 6, backgroundColor: '#f9fafb', borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },

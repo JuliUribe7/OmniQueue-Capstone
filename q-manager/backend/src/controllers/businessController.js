@@ -233,9 +233,9 @@ async function createAppointment(req, res, next) {
 async function getPublicAppointments(req, res, next) {
   try {
     const { businessId } = req.params;
-    const { date } = req.query;
+    const { date, staffId } = req.query;
     if (!date) return res.status(400).json({ error: 'date query param is required' });
-    const slots = await businessService.getPublicAppointments(businessId, date);
+    const slots = await businessService.getPublicAppointments(businessId, date, staffId || null);
     res.json({ bookedSlots: slots });
   } catch (err) { next(err); }
 }

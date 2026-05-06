@@ -126,11 +126,15 @@ async function createAppointment(businessId, serviceId, staffId, customerName, p
   return res.rows[0];
 }
 
-async function getPublicAppointments(businessId, date) {
-  const res = await query(
-    'SELECT "time", COUNT(*) AS count FROM "Appointment" WHERE "businessId" = $1 AND "date" = $2 GROUP BY "time"',
-    [businessId, date],
-  );
+async function getPublicAppointments(businessId, date, staffId) {
+  let queryText = 'SELECT "time", COUNT(*) AS count FROM "Appointment" WHERE "businessId" = $1 AND "date" = $2';
+  const params = [businessId, date];
+  if (staffId) {
+    queryText += ' AND "staffId" = $3';
+    params.push(staffId);
+  }
+  queryText += ' GROUP BY "time"';
+  const res = await query(queryText, params);
   return res.rows.map(r => ({ time: r.time, count: parseInt(r.count, 10) }));
 }
 
