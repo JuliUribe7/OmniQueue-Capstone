@@ -284,48 +284,79 @@ export default function CustomerPortal() {
     );
   }
 
-  // ── Staff avatar row (shared by both modes) ───────────────────────────────
-  function StaffPicker({ selected, onSelect }: { selected: string; onSelect: (id: string) => void }) {
-    if (staffList.length === 0) return null;
-    return (
-      <>
-        <Text style={styles.fieldLabel}>Choose a Staff Member</Text>
-        <View style={styles.staffAvatarWrap}>
-          {/* Any Available */}
+  const staffPickerQueue = staffList.length > 0 && (
+    <>
+      <Text style={styles.fieldLabel}>Choose a Staff Member</Text>
+      <View style={styles.staffAvatarWrap}>
+        <TouchableOpacity
+          style={[styles.staffAvatarItem, staffId === 'any' && styles.staffAvatarItemSelected]}
+          onPress={() => setStaffId('any')}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.staffAvatarFallback, { backgroundColor: staffId === 'any' ? '#2563eb' : '#e5e7eb' }]}>
+            <Text style={{ fontSize: 22 }}>👥</Text>
+          </View>
+          <Text style={[styles.staffAvatarName, staffId === 'any' && styles.staffAvatarNameSelected]}>Any</Text>
+        </TouchableOpacity>
+        {staffList.map(s => (
           <TouchableOpacity
-            style={[styles.staffAvatarItem, selected === 'any' && styles.staffAvatarItemSelected]}
-            onPress={() => onSelect('any')}
+            key={s.id}
+            style={[styles.staffAvatarItem, staffId === s.id && styles.staffAvatarItemSelected]}
+            onPress={() => setStaffId(s.id)}
             activeOpacity={0.7}
           >
-            <View style={[styles.staffAvatarFallback, { backgroundColor: selected === 'any' ? '#2563eb' : '#e5e7eb' }]}>
-              <Text style={{ fontSize: 22 }}>👥</Text>
-            </View>
-            <Text style={[styles.staffAvatarName, selected === 'any' && styles.staffAvatarNameSelected]}>Any</Text>
+            {s.photoUrl ? (
+              <Image source={{ uri: s.photoUrl }} style={styles.staffAvatarCircle} />
+            ) : (
+              <View style={[styles.staffAvatarFallback, { backgroundColor: staffId === s.id ? '#2563eb' : '#e5e7eb' }]}>
+                <Text style={[styles.staffAvatarInitial, { color: staffId === s.id ? '#fff' : '#374151' }]}>
+                  {s.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={[styles.staffAvatarName, staffId === s.id && styles.staffAvatarNameSelected]}>{s.name}</Text>
           </TouchableOpacity>
+        ))}
+      </View>
+    </>
+  );
 
-          {staffList.map(s => (
-            <TouchableOpacity
-              key={s.id}
-              style={[styles.staffAvatarItem, selected === s.id && styles.staffAvatarItemSelected]}
-              onPress={() => onSelect(s.id)}
-              activeOpacity={0.7}
-            >
-              {s.photoUrl ? (
-                <Image source={{ uri: s.photoUrl }} style={styles.staffAvatarCircle} />
-              ) : (
-                <View style={[styles.staffAvatarFallback, { backgroundColor: selected === s.id ? '#2563eb' : '#e5e7eb' }]}>
-                  <Text style={[styles.staffAvatarInitial, { color: selected === s.id ? '#fff' : '#374151' }]}>
-                    {s.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-              )}
-              <Text style={[styles.staffAvatarName, selected === s.id && styles.staffAvatarNameSelected]}>{s.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </>
-    );
-  }
+  const staffPickerBook = staffList.length > 0 && (
+    <>
+      <Text style={styles.fieldLabel}>Choose a Staff Member</Text>
+      <View style={styles.staffAvatarWrap}>
+        <TouchableOpacity
+          style={[styles.staffAvatarItem, bookStaffId === 'any' && styles.staffAvatarItemSelected]}
+          onPress={() => { setBookStaffId('any'); setBookDate(''); setBookTime(''); }}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.staffAvatarFallback, { backgroundColor: bookStaffId === 'any' ? '#2563eb' : '#e5e7eb' }]}>
+            <Text style={{ fontSize: 22 }}>👥</Text>
+          </View>
+          <Text style={[styles.staffAvatarName, bookStaffId === 'any' && styles.staffAvatarNameSelected]}>Any</Text>
+        </TouchableOpacity>
+        {staffList.map(s => (
+          <TouchableOpacity
+            key={s.id}
+            style={[styles.staffAvatarItem, bookStaffId === s.id && styles.staffAvatarItemSelected]}
+            onPress={() => { setBookStaffId(s.id); setBookDate(''); setBookTime(''); }}
+            activeOpacity={0.7}
+          >
+            {s.photoUrl ? (
+              <Image source={{ uri: s.photoUrl }} style={styles.staffAvatarCircle} />
+            ) : (
+              <View style={[styles.staffAvatarFallback, { backgroundColor: bookStaffId === s.id ? '#2563eb' : '#e5e7eb' }]}>
+                <Text style={[styles.staffAvatarInitial, { color: bookStaffId === s.id ? '#fff' : '#374151' }]}>
+                  {s.name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <Text style={[styles.staffAvatarName, bookStaffId === s.id && styles.staffAvatarNameSelected]}>{s.name}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -360,7 +391,7 @@ export default function CustomerPortal() {
               <Text style={styles.cardTitle}>Join the Queue</Text>
               <Text style={styles.cardSub}>Enter your info and we'll hold your spot.</Text>
 
-              <StaffPicker selected={staffId} onSelect={setStaffId} />
+              {staffPickerQueue}
 
               <Text style={styles.fieldLabel}>Choose a Service</Text>
               <View style={styles.chipWrap}>
@@ -402,10 +433,7 @@ export default function CustomerPortal() {
               <Text style={styles.cardTitle}>Book an Appointment</Text>
               <Text style={styles.cardSub}>Pick a date and time that works for you.</Text>
 
-              <StaffPicker
-                selected={bookStaffId}
-                onSelect={(id) => { setBookStaffId(id); setBookDate(''); setBookTime(''); }}
-              />
+              {staffPickerBook}
 
               {/* Service */}
               <Text style={styles.fieldLabel}>Choose a Service</Text>
