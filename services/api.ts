@@ -117,6 +117,8 @@ export const api = {
     apiFetch('/api/businesses/me/staff'),
   addStaff: (name: string, role: string, phone: string, photoUrl: string): Promise<{ staff: ApiStaff }> =>
     apiFetch('/api/businesses/me/staff', { method: 'POST', body: JSON.stringify({ name, role, phone, photoUrl }) }),
+  updateStaff: (staffId: string, name: string, role: string, phone: string, photoUrl: string): Promise<{ staff: ApiStaff }> =>
+    apiFetch(`/api/staff/${staffId}`, { method: 'PUT', body: JSON.stringify({ name, role, phone, photoUrl }) }),
   deleteStaff: (staffId: string) =>
     apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' }),
 

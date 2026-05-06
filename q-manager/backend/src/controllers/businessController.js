@@ -177,6 +177,19 @@ async function addStaff(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function updateStaff(req, res, next) {
+  try {
+    const { staffId } = req.params;
+    const { name, role, phone, photoUrl } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const member = await businessService.updateStaff(staffId, business.id, name, role, phone, photoUrl);
+    if (!member) return res.status(404).json({ error: 'Staff not found' });
+    res.json({ staff: member });
+  } catch (err) { next(err); }
+}
+
 async function deleteStaff(req, res, next) {
   try {
     const { staffId } = req.params;
@@ -284,6 +297,7 @@ module.exports = {
   addWalkin,
   getStaff,
   addStaff,
+  updateStaff,
   deleteStaff,
   createAppointment,
   getPublicAppointments,

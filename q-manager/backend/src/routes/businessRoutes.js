@@ -30,6 +30,7 @@ router.post('/api/businesses/me/queue/walkin', businessController.addWalkin);
 // Staff
 router.get('/api/businesses/me/staff', businessController.getStaff);
 router.post('/api/businesses/me/staff', businessController.addStaff);
+router.put('/api/staff/:staffId', businessController.updateStaff);
 router.delete('/api/staff/:staffId', businessController.deleteStaff);
 
 // Appointments (auth)

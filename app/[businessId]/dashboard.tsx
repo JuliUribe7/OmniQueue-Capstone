@@ -126,12 +126,15 @@ export default function BusinessDashboard() {
   const [notificationChannel, setNotificationChannel] = useState<'sms' | 'email' | 'both'>('sms');
   const [notifSaved, setNotifSaved] = useState(false);
 
-  // Staff (localStorage)
+  // Staff
   const [staff, setStaff] = useState<ApiStaff[]>([]);
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
   const [newStaffName, setNewStaffName]   = useState('');
   const [newStaffRole, setNewStaffRole]   = useState('');
   const [newStaffPhone, setNewStaffPhone] = useState('');
   const [newStaffPhoto, setNewStaffPhoto] = useState('');
+  const [staffSaving, setStaffSaving]     = useState(false);
 
   // Appointments
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
@@ -938,16 +941,78 @@ export default function BusinessDashboard() {
     const maxStaff = plan === 'pro' ? Infinity : 3;
     const atLimit = staff.length >= maxStaff;
 
-    async function addApiStaff() {
+    function openAddModal() {
+      setEditingStaffId(null);
+      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+      setShowStaffModal(true);
+    }
+
+    function openEditModal(member: ApiStaff) {
+      setEditingStaffId(member.id);
+      setNewStaffName(member.name);
+      setNewStaffRole(member.role ?? '');
+      setNewStaffPhone(member.phone ?? '');
+      setNewStaffPhoto(member.photoUrl ?? '');
+      setShowStaffModal(true);
+    }
+
+    function closeModal() {
+      setShowStaffModal(false);
+      setEditingStaffId(null);
+      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+    }
+
+    function pickPhoto(useCamera: boolean) {
+      if (typeof document === 'undefined') return;
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      if (useCamera) input.setAttribute('capture', 'environment');
+      input.onchange = (e: any) => {
+        const file = e.target?.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev: any) => {
+          const img = new window.Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const size = 150;
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            const min = Math.min(img.width, img.height);
+            const sx = (img.width - min) / 2;
+            const sy = (img.height - min) / 2;
+            ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+            setNewStaffPhoto(canvas.toDataURL('image/jpeg', 0.75));
+          };
+          img.src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+    }
+
+    async function saveStaff() {
       if (!newStaffName.trim()) return;
+      setStaffSaving(true);
       try {
-        const { staff: member } = await api.addStaff(
-          newStaffName.trim(), newStaffRole.trim() || 'Staff',
-          newStaffPhone.trim(), newStaffPhoto.trim(),
-        );
-        setStaff(prev => [...prev, member]);
-        setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
-      } catch {}
+        if (editingStaffId) {
+          const { staff: updated } = await api.updateStaff(
+            editingStaffId,
+            newStaffName.trim(), newStaffRole.trim() || 'Staff',
+            newStaffPhone.trim(), newStaffPhoto.trim(),
+          );
+          setStaff(prev => prev.map(s => s.id === editingStaffId ? updated : s));
+        } else {
+          const { staff: member } = await api.addStaff(
+            newStaffName.trim(), newStaffRole.trim() || 'Staff',
+            newStaffPhone.trim(), newStaffPhoto.trim(),
+          );
+          setStaff(prev => [...prev, member]);
+        }
+        closeModal();
+      } catch {} finally { setStaffSaving(false); }
     }
 
     async function removeApiStaff(id: string) {
@@ -958,78 +1023,191 @@ export default function BusinessDashboard() {
     }
 
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <View style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
-          <Text style={[styles.sectionTitle, { color: C.text }]}>Staff Members</Text>
-          <Text style={[styles.sectionSub, { color: C.textMuted }]}>
-            Customers can choose a specific staff member when joining the queue.
-          </Text>
+
+          {/* Header row */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <View>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>Staff Members</Text>
+              <Text style={[styles.sectionSub, { color: C.textMuted }]}>
+                Customers choose a staff member when booking.
+              </Text>
+            </View>
+            {!atLimit && (
+              <TouchableOpacity
+                style={[styles.addStaffBtn, { backgroundColor: C.primary }]}
+                onPress={openAddModal}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addStaffBtnText}>Add Staff +</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {plan === 'basic' && (
-            <View style={[styles.planBanner, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}>
+            <View style={[styles.planBanner, { backgroundColor: '#fef3c7', borderColor: '#f59e0b', marginBottom: 8 }]}>
               <Text style={{ color: '#92400e', fontWeight: '600', fontSize: 13 }}>
                 Basic plan: up to 3 staff members. Upgrade to Pro for unlimited.
               </Text>
             </View>
           )}
 
-          <View style={{ gap: 12, marginTop: 8 }}>
-            {staff.map(member => (
-              <View key={member.id} style={[styles.staffCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-                <View style={[styles.staffAvatar, { backgroundColor: C.primary + '22' }]}>
-                  {member.photoUrl ? (
-                    <Image source={{ uri: member.photoUrl }} style={styles.staffAvatarImg} />
-                  ) : (
-                    <Text style={[styles.staffAvatarText, { color: C.primary }]}>
-                      {member.name.charAt(0).toUpperCase()}
-                    </Text>
-                  )}
+          {/* Staff grid */}
+          {staff.length === 0 ? (
+            <View style={[styles.staffEmptyState, { borderColor: C.border }]}>
+              <Text style={{ fontSize: 40, marginBottom: 12 }}>👤</Text>
+              <Text style={[{ fontSize: 16, fontWeight: '700', color: C.text, marginBottom: 6 }]}>No staff yet</Text>
+              <Text style={[{ fontSize: 13, color: C.textMuted, textAlign: 'center', lineHeight: 20 }]}>
+                Add your first staff member so customers can choose who serves them.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.staffGrid}>
+              {staff.map(member => (
+                <View key={member.id} style={[styles.staffGridCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+                  {/* Avatar */}
+                  <View style={styles.staffGridAvatarWrap}>
+                    {member.photoUrl ? (
+                      <Image source={{ uri: member.photoUrl }} style={styles.staffGridAvatar} />
+                    ) : (
+                      <View style={[styles.staffGridAvatarFallback, { backgroundColor: C.primary + '22' }]}>
+                        <Text style={[styles.staffGridAvatarInitial, { color: C.primary }]}>
+                          {member.name.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {/* Info */}
+                  <Text style={[styles.staffGridName, { color: C.text }]}>{member.name}</Text>
+                  <Text style={[styles.staffGridRole, { color: C.textMuted }]}>{member.role}</Text>
+                  {!!member.phone && <Text style={[styles.staffGridPhone, { color: C.textSub }]}>{member.phone}</Text>}
+                  {/* Actions */}
+                  <View style={styles.staffGridActions}>
+                    <TouchableOpacity
+                      style={[styles.staffActionBtn, { backgroundColor: C.primary + '18', borderColor: C.primary + '40' }]}
+                      onPress={() => openEditModal(member)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.staffActionBtnText, { color: C.primary }]}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.staffActionBtn, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}
+                      onPress={() => removeApiStaff(member.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.staffActionBtnText, { color: '#dc2626' }]}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.staffName, { color: C.text }]}>{member.name}</Text>
-                  <Text style={[styles.staffRole, { color: C.textMuted }]}>{member.role}</Text>
-                  {!!member.phone && <Text style={[styles.staffPhone, { color: C.textSub }]}>{member.phone}</Text>}
-                </View>
-                <TouchableOpacity onPress={() => removeApiStaff(member.id)} style={{ padding: 8 }}>
-                  <Text style={{ color: C.textMuted, fontSize: 18 }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
 
-          {atLimit && plan === 'basic' ? (
+          {atLimit && plan === 'basic' && (
             <TouchableOpacity style={[styles.addBtn, { marginTop: 16, backgroundColor: '#f59e0b' }]} onPress={() => setActiveTab('subscription')}>
               <Text style={styles.addBtnText}>Upgrade to Pro for More Staff</Text>
             </TouchableOpacity>
-          ) : (
-            <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border, marginTop: 16 }]}>
-              <Text style={[styles.settingsCardTitle, { color: C.text }]}>Add Staff Member</Text>
-              {[
-                { label: 'Name *', value: newStaffName, setter: setNewStaffName, placeholder: 'e.g. James Rivera' },
-                { label: 'Role', value: newStaffRole, setter: setNewStaffRole, placeholder: 'e.g. Barber, Doctor' },
-                { label: 'Phone (optional)', value: newStaffPhone, setter: setNewStaffPhone, placeholder: '(555) 000-0000' },
-                { label: 'Photo URL (optional)', value: newStaffPhoto, setter: setNewStaffPhoto, placeholder: 'https://...' },
-              ].map(({ label, value, setter, placeholder }) => (
-                <View key={label}>
-                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>{label}</Text>
-                  <TextInput
-                    style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
-                    value={value} onChangeText={setter}
-                    placeholder={placeholder} placeholderTextColor={C.placeholder}
-                  />
-                </View>
-              ))}
-              <TouchableOpacity
-                style={[styles.addBtn, { marginTop: 8 }, !newStaffName.trim() && styles.addBtnDisabled]}
-                onPress={addApiStaff}
-                disabled={!newStaffName.trim()}
-              >
-                <Text style={styles.addBtnText}>Add Staff Member</Text>
-              </TouchableOpacity>
-            </View>
           )}
         </ScrollView>
-      </KeyboardAvoidingView>
+
+        {/* Add / Edit Staff Modal */}
+        <Modal visible={showStaffModal} transparent animationType="fade" onRequestClose={closeModal}>
+          <View style={styles.staffModalOverlay}>
+            <View style={[styles.staffModalCard, { backgroundColor: C.surface }]}>
+              {/* Modal header */}
+              <View style={styles.staffModalHeader}>
+                <Text style={[styles.staffModalTitle, { color: C.text }]}>
+                  {editingStaffId ? 'Edit Staff Member' : 'Add Staff Member'}
+                </Text>
+                <TouchableOpacity onPress={closeModal} style={styles.staffModalClose}>
+                  <Text style={{ fontSize: 20, color: C.textMuted }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Photo preview */}
+                <View style={styles.staffModalAvatarRow}>
+                  {newStaffPhoto ? (
+                    <Image source={{ uri: newStaffPhoto }} style={styles.staffModalAvatar} />
+                  ) : (
+                    <View style={[styles.staffModalAvatarFallback, { backgroundColor: C.primary + '22' }]}>
+                      <Text style={{ fontSize: 32, color: C.primary }}>
+                        {newStaffName ? newStaffName.charAt(0).toUpperCase() : '👤'}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Photo picker buttons */}
+                <View style={styles.staffPhotoRow}>
+                  <TouchableOpacity style={[styles.staffPhotoBtnSmall, { borderColor: C.border, backgroundColor: C.inputBg }]} onPress={() => pickPhoto(true)} activeOpacity={0.7}>
+                    <Text style={[styles.staffPhotoBtnSmallText, { color: C.text }]}>📷 Camera</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.staffPhotoBtnSmall, { borderColor: C.border, backgroundColor: C.inputBg }]} onPress={() => pickPhoto(false)} activeOpacity={0.7}>
+                    <Text style={[styles.staffPhotoBtnSmallText, { color: C.text }]}>📁 Upload</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* URL fallback */}
+                <Text style={[styles.fieldLabel, { color: C.textSub, marginTop: 6 }]}>Or paste image URL</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  value={newStaffPhoto.startsWith('data:') ? '' : newStaffPhoto}
+                  onChangeText={setNewStaffPhoto}
+                  placeholder="https://..." placeholderTextColor={C.placeholder}
+                  autoCapitalize="none"
+                />
+
+                {/* Name */}
+                <Text style={[styles.fieldLabel, { color: C.textSub }]}>Name *</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  value={newStaffName} onChangeText={setNewStaffName}
+                  placeholder="e.g. James Rivera" placeholderTextColor={C.placeholder}
+                  autoCapitalize="words"
+                />
+
+                {/* Role */}
+                <Text style={[styles.fieldLabel, { color: C.textSub }]}>Role</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  value={newStaffRole} onChangeText={setNewStaffRole}
+                  placeholder="e.g. Barber, Doctor" placeholderTextColor={C.placeholder}
+                  autoCapitalize="words"
+                />
+
+                {/* Phone */}
+                <Text style={[styles.fieldLabel, { color: C.textSub }]}>Phone (optional)</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                  value={newStaffPhone} onChangeText={setNewStaffPhone}
+                  placeholder="(555) 000-0000" placeholderTextColor={C.placeholder}
+                  keyboardType="phone-pad"
+                />
+
+                {/* Action buttons */}
+                <View style={styles.staffModalBtns}>
+                  <TouchableOpacity style={[styles.staffModalCancelBtn, { borderColor: C.border }]} onPress={closeModal} activeOpacity={0.7}>
+                    <Text style={[styles.staffModalCancelText, { color: C.textSub }]}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.staffModalSaveBtn, { backgroundColor: C.primary }, (!newStaffName.trim() || staffSaving) && { opacity: 0.5 }]}
+                    onPress={saveStaff}
+                    disabled={!newStaffName.trim() || staffSaving}
+                    activeOpacity={0.8}
+                  >
+                    {staffSaving
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.staffModalSaveText}>{editingStaffId ? 'Save Changes' : 'Add Staff'}</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </View>
     );
   }
 
@@ -2077,6 +2255,41 @@ const styles = StyleSheet.create({
   staffName: { fontSize: 15, fontWeight: '700' },
   staffRole: { fontSize: 12, marginTop: 1 },
   staffPhone: { fontSize: 12, marginTop: 1 },
+
+  // Staff redesign
+  addStaffBtn: { borderRadius: BorderRadius.md, paddingHorizontal: 14, paddingVertical: 8 },
+  addStaffBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  staffEmptyState: { alignItems: 'center', paddingVertical: 48, borderWidth: 1.5, borderStyle: 'dashed' as any, borderRadius: BorderRadius.xl, marginTop: 8 },
+  staffGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 8 },
+  staffGridCard: { width: '47%', borderWidth: 1, borderRadius: BorderRadius.xl, padding: 16, alignItems: 'center', gap: 6 },
+  staffGridAvatarWrap: { marginBottom: 4 },
+  staffGridAvatar: { width: 72, height: 72, borderRadius: 36 },
+  staffGridAvatarFallback: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center' },
+  staffGridAvatarInitial: { fontSize: 28, fontWeight: '800' },
+  staffGridName: { fontSize: 14, fontWeight: '700', textAlign: 'center' },
+  staffGridRole: { fontSize: 12, textAlign: 'center' },
+  staffGridPhone: { fontSize: 12, textAlign: 'center' },
+  staffGridActions: { flexDirection: 'row', gap: 6, marginTop: 8, width: '100%' },
+  staffActionBtn: { flex: 1, paddingVertical: 7, borderRadius: BorderRadius.md, alignItems: 'center', borderWidth: 1 },
+  staffActionBtnText: { fontSize: 12, fontWeight: '700' },
+
+  // Staff modal
+  staffModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  staffModalCard: { width: '100%', maxWidth: 440, borderRadius: 20, padding: 24, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 20, elevation: 10, maxHeight: '90%' },
+  staffModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  staffModalTitle: { fontSize: 18, fontWeight: '800' },
+  staffModalClose: { padding: 4 },
+  staffModalAvatarRow: { alignItems: 'center', marginBottom: 12 },
+  staffModalAvatar: { width: 80, height: 80, borderRadius: 40 },
+  staffModalAvatarFallback: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center' },
+  staffPhotoRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  staffPhotoBtnSmall: { flex: 1, paddingVertical: 10, borderRadius: BorderRadius.md, alignItems: 'center', borderWidth: 1 },
+  staffPhotoBtnSmallText: { fontSize: 13, fontWeight: '600' },
+  staffModalBtns: { flexDirection: 'row', gap: 10, marginTop: 8, marginBottom: 8 },
+  staffModalCancelBtn: { flex: 1, paddingVertical: 13, borderRadius: BorderRadius.lg, alignItems: 'center', borderWidth: 1 },
+  staffModalCancelText: { fontSize: 15, fontWeight: '600' },
+  staffModalSaveBtn: { flex: 2, paddingVertical: 13, borderRadius: BorderRadius.lg, alignItems: 'center' },
+  staffModalSaveText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 
   // Subscription
   planCard: { borderRadius: BorderRadius.xl, borderWidth: 1, padding: Spacing.lg },

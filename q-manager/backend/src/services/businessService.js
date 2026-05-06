@@ -109,6 +109,15 @@ async function addStaff(businessId, name, role, phone, photoUrl) {
   return res.rows[0];
 }
 
+async function updateStaff(staffId, businessId, name, role, phone, photoUrl) {
+  const res = await query(
+    `UPDATE "Staff" SET "name" = $1, "role" = $2, "phone" = $3, "photoUrl" = $4, "updatedAt" = NOW()
+     WHERE "id" = $5 AND "businessId" = $6 RETURNING *`,
+    [name, role || 'Staff', phone || null, photoUrl || null, staffId, businessId],
+  );
+  return res.rows[0] || null;
+}
+
 async function deleteStaff(staffId, businessId) {
   const res = await query(
     'DELETE FROM "Staff" WHERE "id" = $1 AND "businessId" = $2 RETURNING *',
@@ -198,6 +207,7 @@ module.exports = {
   getQueueForBusiness,
   getStaff,
   addStaff,
+  updateStaff,
   deleteStaff,
   createAppointment,
   getPublicAppointments,
