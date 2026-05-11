@@ -9,6 +9,7 @@ router.get('/api/businesses/:businessId/public', businessController.getPublicBus
 router.post('/api/businesses/:businessId/queue/join', businessController.joinQueue);
 router.post('/api/businesses/:businessId/appointments', businessController.createAppointment);
 router.get('/api/businesses/:businessId/appointments/public', businessController.getPublicAppointments);
+router.get('/api/businesses/:businessId/staff', businessController.getPublicStaff);
 
 router.use(requireAuth);
 

@@ -166,6 +166,14 @@ async function getStaff(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function getPublicStaff(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const staffMembers = await businessService.getStaff(businessId);
+    res.json({ staff: staffMembers });
+  } catch (err) { next(err); }
+}
+
 async function addStaff(req, res, next) {
   try {
     const { name, role, phone, photoUrl } = req.body;
@@ -296,6 +304,7 @@ module.exports = {
   getQueue,
   addWalkin,
   getStaff,
+  getPublicStaff,
   addStaff,
   updateStaff,
   deleteStaff,
