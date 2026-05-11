@@ -25,15 +25,17 @@ async function getBusinessById(businessId) {
   return res.rows[0] || null;
 }
 
-async function updateBusiness(userId, name, type, notificationChannel) {
+async function updateBusiness(userId, name, type, notificationChannel, allowStaffSelection) {
   const res = await query(
     `UPDATE "Business"
      SET "name" = COALESCE($1, "name"),
          "type" = COALESCE($2, "type"),
          "notificationChannel" = COALESCE($3, "notificationChannel"),
+         "allowStaffSelection" = COALESCE($4, "allowStaffSelection"),
          "updatedAt" = NOW()
-     WHERE "userId" = $4 RETURNING *`,
-    [name || null, type || null, notificationChannel || null, userId],
+     WHERE "userId" = $5 RETURNING *`,
+    [name || null, type || null, notificationChannel || null,
+     allowStaffSelection !== undefined ? allowStaffSelection : null, userId],
   );
   return res.rows[0] || null;
 }

@@ -12,7 +12,7 @@ import { api, ApiStaff } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
 
 type PublicService  = { id: string; name: string; avgTime: number };
-type PublicBusiness = { id: string; name: string; type: string; services: PublicService[] };
+type PublicBusiness = { id: string; name: string; type: string; services: PublicService[]; allowStaffSelection?: boolean };
 type ConfirmedBooking = {
   id: string; date: string; time: string;
   serviceId: string; serviceName: string;
@@ -284,7 +284,7 @@ export default function CustomerPortal() {
     );
   }
 
-  const staffPickerQueue = staffList.length > 0 && (
+  const staffPickerQueue = staffList.length > 0 && business?.allowStaffSelection !== false && (
     <>
       <Text style={styles.fieldLabel}>Choose a Staff Member</Text>
       <View style={styles.staffAvatarWrap}>
@@ -321,7 +321,7 @@ export default function CustomerPortal() {
     </>
   );
 
-  const staffPickerBook = staffList.length > 0 && (
+  const staffPickerBook = staffList.length > 0 && business?.allowStaffSelection !== false && (
     <>
       <Text style={styles.fieldLabel}>Choose a Staff Member</Text>
       <View style={styles.staffAvatarWrap}>

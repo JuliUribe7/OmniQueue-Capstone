@@ -124,6 +124,7 @@ export default function BusinessDashboard() {
   });
   const [hoursSaved, setHoursSaved] = useState(false);
   const [notificationChannel, setNotificationChannel] = useState<'sms' | 'email' | 'both'>('sms');
+  const [allowStaffSelection, setAllowStaffSelection] = useState(true);
   const [notifSaved, setNotifSaved] = useState(false);
 
   // Staff
@@ -213,6 +214,7 @@ export default function BusinessDashboard() {
         // Don't overwrite plan if ?success=true just fired — updateSubscription is in-flight
         const successParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('success') === 'true';
         if (!successParam) setPlan(biz.plan ?? 'basic');
+        setAllowStaffSelection(biz.allowStaffSelection !== false);
         setAppointments(apptRes.appointments);
         if (svcs.length > 0) setWalkInServiceId(svcs[0].id);
       } catch {
@@ -1912,6 +1914,47 @@ export default function BusinessDashboard() {
             }}
           >
             <Text style={styles.addBtnText}>Save Notification Preference</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Staff Selection */}
+        <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.settingsCardTitle, { color: C.text }]}>Staff Selection</Text>
+          <Text style={[styles.settingsCardSub, { color: C.textMuted }]}>
+            When enabled, customers can choose a specific staff member on the portal.
+          </Text>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+            {([
+              { key: true,  label: 'Allow' },
+              { key: false, label: "Don't Allow" },
+            ] as { key: boolean; label: string }[]).map(({ key, label }) => (
+              <TouchableOpacity
+                key={String(key)}
+                style={{
+                  flex: 1, paddingVertical: 10, paddingHorizontal: 16,
+                  borderRadius: 10, borderWidth: 1.5, alignItems: 'center',
+                  borderColor: allowStaffSelection === key ? '#2563eb' : C.border,
+                  backgroundColor: allowStaffSelection === key ? '#eff6ff' : C.surfaceAlt,
+                }}
+                onPress={() => setAllowStaffSelection(key)}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 14, fontWeight: '600', color: allowStaffSelection === key ? '#2563eb' : C.textSub }}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[styles.saveServicesBtn, { marginTop: 16 }]}
+            onPress={async () => {
+              if (!business) return;
+              try {
+                await api.updateMyBusiness(business.name, business.type, undefined, allowStaffSelection);
+              } catch {}
+            }}
+          >
+            <Text style={styles.addBtnText}>Save</Text>
           </TouchableOpacity>
         </View>
 

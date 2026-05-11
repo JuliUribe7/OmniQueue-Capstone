@@ -22,6 +22,7 @@ export interface ApiBusiness {
   name: string;
   type: string;
   plan: 'basic' | 'pro';
+  allowStaffSelection: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -86,8 +87,8 @@ export const api = {
     apiFetch('/api/businesses', { method: 'POST', body: JSON.stringify({ name, type }) }),
   getMyBusiness: (): Promise<{ business: ApiBusiness }> =>
     apiFetch('/api/businesses/me'),
-  updateMyBusiness: (name: string, type: string, notificationChannel?: string) =>
-    apiFetch('/api/businesses/me', { method: 'PUT', body: JSON.stringify({ name, type, notificationChannel }) }),
+  updateMyBusiness: (name: string, type: string, notificationChannel?: string, allowStaffSelection?: boolean) =>
+    apiFetch('/api/businesses/me', { method: 'PUT', body: JSON.stringify({ name, type, notificationChannel, allowStaffSelection }) }),
 
   // Services
   getServices: (): Promise<{ services: ApiService[] }> =>

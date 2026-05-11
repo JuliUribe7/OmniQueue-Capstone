@@ -17,7 +17,7 @@ async function getPublicBusiness(req, res, next) {
   try {
     const { businessId } = req.params;
     const res2 = await require('../db').query(
-      `SELECT b.id, b.name, b.type,
+      `SELECT b.id, b.name, b.type, b."allowStaffSelection",
               json_agg(json_build_object('id', s.id, 'name', s.name, 'avgTime', s."avgTime")) as services
        FROM "Business" b
        LEFT JOIN "Service" s ON s."businessId" = b.id
@@ -73,8 +73,8 @@ async function getMyBusiness(req, res, next) {
 
 async function updateMyBusiness(req, res, next) {
   try {
-    const { name, type, notificationChannel } = req.body;
-    const business = await businessService.updateBusiness(req.user.id, name, type, notificationChannel);
+    const { name, type, notificationChannel, allowStaffSelection } = req.body;
+    const business = await businessService.updateBusiness(req.user.id, name, type, notificationChannel, allowStaffSelection);
     if (!business) return res.status(404).json({ error: 'No business found' });
     res.json({ business });
   } catch (err) {
