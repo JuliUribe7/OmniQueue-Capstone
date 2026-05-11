@@ -139,6 +139,7 @@ export default function BusinessDashboard() {
   // Appointments
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
   const [calView, setCalView] = useState<'today' | 'week' | 'month'>('today');
+  const [apptStaffFilter, setApptStaffFilter] = useState<string>('all');
 
   // Google Calendar
   const [googleConnected, setGoogleConnected]   = useState(false);
@@ -489,6 +490,12 @@ export default function BusinessDashboard() {
             return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
           }
 
+          // Group today's appointments by staff
+          const staffGroups = staff
+            .map(s => ({ member: s, appts: todayAppts.filter(a => a.staffId === s.id) }))
+            .filter(g => g.appts.length > 0);
+          const anyAppts = todayAppts.filter(a => !staff.find(s => s.id === a.staffId));
+
           return (
             <>
               <View style={styles.sectionHeader}>
@@ -503,26 +510,33 @@ export default function BusinessDashboard() {
                   <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No appointments today</Text>
                 </View>
               ) : (
-                todayAppts.map(appt => {
-                  const svc = services.find(s => s.id === appt.serviceId);
-                  const staffMember = staff.find(s => s.id === appt.staffId);
-                  return (
-                    <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', alignItems: 'stretch' }]}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <View style={styles.apptTimeCol}>
-                          <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
+                <>
+                  {staffGroups.map(({ member, appts }) => (
+                    <View key={member.id}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, marginTop: 4 }}>
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.primary + '22', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ fontSize: 12, fontWeight: '700', color: C.primary }}>{member.name.charAt(0)}</Text>
                         </View>
-                        <View style={styles.apptInfo}>
-                          <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
-                          <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
-                          {staffMember && (
-                            <Text style={[styles.apptStaff, { color: C.textMuted }]}>with {staffMember.name}</Text>
-                          )}
-                        </View>
-                        <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
-                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>{member.name}</Text>
+                        <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                        <Text style={{ fontSize: 11, color: C.textMuted }}>{appts.length} appt{appts.length !== 1 ? 's' : ''}</Text>
                       </View>
+                      {appts.map(appt => {
+                        const svc = services.find(s => s.id === appt.serviceId);
+                        return (
+                          <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', alignItems: 'stretch', borderLeftWidth: 3, borderLeftColor: C.primary }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <View style={styles.apptTimeCol}>
+                                <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
+                              </View>
+                              <View style={styles.apptInfo}>
+                                <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
+                                <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
+                              </View>
+                              <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
+                              </View>
+                            </View>
                       {appt.phoneNumber ? (
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                           <TouchableOpacity
@@ -539,7 +553,51 @@ export default function BusinessDashboard() {
                       ) : null}
                     </View>
                   );
-                })
+                })}
+                    </View>
+                  ))}
+
+                  {anyAppts.length > 0 && (
+                    <View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, marginTop: 4 }}>
+                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ fontSize: 14 }}>👥</Text>
+                        </View>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>Any Available</Text>
+                        <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                        <Text style={{ fontSize: 11, color: C.textMuted }}>{anyAppts.length} appt{anyAppts.length !== 1 ? 's' : ''}</Text>
+                      </View>
+                      {anyAppts.map(appt => {
+                        const svc = services.find(s => s.id === appt.serviceId);
+                        return (
+                          <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', alignItems: 'stretch' }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <View style={styles.apptTimeCol}>
+                                <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
+                              </View>
+                              <View style={styles.apptInfo}>
+                                <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
+                                <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
+                              </View>
+                              <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
+                              </View>
+                            </View>
+                            {appt.phoneNumber ? (
+                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                                <TouchableOpacity
+                                  style={{ flex: 1, backgroundColor: '#eff6ff', borderRadius: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderColor: '#2563eb22' }}
+                                  onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
+                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>✉ Message</Text>
+                                </TouchableOpacity>
+                              </View>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
               )}
             </>
           );
@@ -1404,57 +1462,140 @@ export default function BusinessDashboard() {
       return Math.max(((svc?.avgTime ?? 30) / 60) * HOUR_H, 28);
     }
 
-    // ── Today — simple card list ──
+    // ── Today — grouped by staff with filter ──
     function TodayView() {
-      const dayAppts = (byDate[todayKey] ?? []).sort((a, b) => a.time.localeCompare(b.time));
-      if (dayAppts.length === 0) {
+      const allDayAppts = (byDate[todayKey] ?? []).sort((a, b) => a.time.localeCompare(b.time));
+
+      // Build filter options: All + each staff with appts + Any if applicable
+      const staffWithAppts = staff.filter(s => allDayAppts.some(a => a.staffId === s.id));
+      const hasAny = allDayAppts.some(a => !staff.find(s => s.id === a.staffId));
+
+      // Apply filter
+      const filteredAppts = apptStaffFilter === 'all'
+        ? allDayAppts
+        : apptStaffFilter === 'any'
+          ? allDayAppts.filter(a => !staff.find(s => s.id === a.staffId))
+          : allDayAppts.filter(a => a.staffId === apptStaffFilter);
+
+      // Group filtered appts by staff for display when showing all
+      function renderApptCard(appt: typeof appointments[0], i: number) {
+        const svc    = services.find(s => s.id === appt.serviceId);
+        const member = staff.find(s => s.id === appt.staffId);
+        const color  = COLORS[i % COLORS.length];
         return (
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 36, marginBottom: 10 }}>📅</Text>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>No appointments today</Text>
-            <Text style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
-              {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-            </Text>
+          <View key={appt.id} style={{ backgroundColor: C.surface, borderRadius: 12, padding: 14,
+            borderLeftWidth: 4, borderLeftColor: color,
+            shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2, gap: 4 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>{fmtTime(appt.time)}</Text>
+              {svc && (
+                <View style={{ backgroundColor: color + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color }}>{svc.name}</Text>
+                </View>
+              )}
+            </View>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: C.text }}>{appt.customerName}</Text>
+            <View style={{ flexDirection: 'row', gap: 12 }}>
+              {appt.phoneNumber ? <Text style={{ fontSize: 12, color: C.textMuted }}>📞 {appt.phoneNumber}</Text> : null}
+              {member ? <Text style={{ fontSize: 12, color: C.textMuted }}>👤 {member.name}</Text> : null}
+            </View>
+            {appt.phoneNumber ? (
+              <TouchableOpacity
+                style={{ marginTop: 8, backgroundColor: color + '18', borderRadius: 8, paddingVertical: 7,
+                  alignItems: 'center', borderWidth: 1, borderColor: color + '40' }}
+                onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
+                <Text style={{ fontSize: 12, fontWeight: '600', color }}>✉ Message Customer</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         );
       }
+
       return (
-        <ScrollView contentContainerStyle={{ padding: 14, gap: 10 }} showsVerticalScrollIndicator={false}>
-          <Text style={{ fontSize: 13, color: C.textMuted, marginBottom: 2 }}>
-            {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · {dayAppts.length} appointment{dayAppts.length !== 1 ? 's' : ''}
-          </Text>
-          {dayAppts.map((appt, i) => {
-            const svc    = services.find(s => s.id === appt.serviceId);
-            const member = staff.find(s => s.id === appt.staffId);
-            const color  = COLORS[i % COLORS.length];
-            return (
-              <View key={appt.id} style={{ backgroundColor: C.surface, borderRadius: 12, padding: 14,
-                borderLeftWidth: 4, borderLeftColor: color,
-                shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 8, elevation: 2, gap: 4 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>{fmtTime(appt.time)}</Text>
-                  {svc && (
-                    <View style={{ backgroundColor: color + '20', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
-                      <Text style={{ fontSize: 11, fontWeight: '600', color }}>{svc.name}</Text>
+        <ScrollView contentContainerStyle={{ gap: 10 }} showsVerticalScrollIndicator={false}>
+          {/* Staff filter tabs */}
+          {(staffWithAppts.length > 0 || hasAny) && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingHorizontal: 14, paddingTop: 12, gap: 8 }}>
+              {[{ id: 'all', name: `All (${allDayAppts.length})` },
+                ...staffWithAppts.map(s => ({ id: s.id, name: s.name })),
+                ...(hasAny ? [{ id: 'any', name: 'Any Available' }] : []),
+              ].map(opt => (
+                <TouchableOpacity
+                  key={opt.id}
+                  onPress={() => setApptStaffFilter(opt.id)}
+                  style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+                    backgroundColor: apptStaffFilter === opt.id ? C.primary : C.surface,
+                    borderWidth: 1, borderColor: apptStaffFilter === opt.id ? C.primary : C.border }}
+                  activeOpacity={0.7}>
+                  <Text style={{ fontSize: 13, fontWeight: '600',
+                    color: apptStaffFilter === opt.id ? '#fff' : C.textSub }}>{opt.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+
+          {allDayAppts.length === 0 ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 }}>
+              <Text style={{ fontSize: 36, marginBottom: 10 }}>📅</Text>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>No appointments today</Text>
+              <Text style={{ fontSize: 13, color: C.textMuted, marginTop: 4 }}>
+                {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </Text>
+            </View>
+          ) : filteredAppts.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingTop: 40 }}>
+              <Text style={{ fontSize: 13, color: C.textMuted }}>No appointments for this staff member today</Text>
+            </View>
+          ) : apptStaffFilter === 'all' ? (
+            // Grouped by staff when showing all
+            <View style={{ padding: 14, gap: 16 }}>
+              {staffWithAppts.map(member => {
+                const memberAppts = allDayAppts.filter(a => a.staffId === member.id);
+                return (
+                  <View key={member.id}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.primary + '22',
+                        alignItems: 'center', justifyContent: 'center' }}>
+                        <Text style={{ fontSize: 12, fontWeight: '700', color: C.primary }}>{member.name.charAt(0)}</Text>
+                      </View>
+                      <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>{member.name}</Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                      <Text style={{ fontSize: 11, color: C.textMuted }}>{memberAppts.length} appt{memberAppts.length !== 1 ? 's' : ''}</Text>
                     </View>
-                  )}
+                    <View style={{ gap: 8 }}>
+                      {memberAppts.map((appt, i) => renderApptCard(appt, i))}
+                    </View>
+                  </View>
+                );
+              })}
+              {hasAny && (
+                <View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#f3f4f6',
+                      alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ fontSize: 14 }}>👥</Text>
+                    </View>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>Any Available</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
+                  </View>
+                  <View style={{ gap: 8 }}>
+                    {allDayAppts.filter(a => !staff.find(s => s.id === a.staffId)).map((appt, i) => renderApptCard(appt, i))}
+                  </View>
                 </View>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: C.text }}>{appt.customerName}</Text>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  {appt.phoneNumber ? <Text style={{ fontSize: 12, color: C.textMuted }}>📞 {appt.phoneNumber}</Text> : null}
-                  {member ? <Text style={{ fontSize: 12, color: C.textMuted }}>👤 {member.name}</Text> : null}
-                </View>
-                {appt.phoneNumber ? (
-                  <TouchableOpacity
-                    style={{ marginTop: 8, backgroundColor: color + '18', borderRadius: 8, paddingVertical: 7,
-                      alignItems: 'center', borderWidth: 1, borderColor: color + '40' }}
-                    onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color }}>✉ Message Customer</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
-            );
-          })}
+              )}
+              {/* Fallback for days with no staff assignments at all */}
+              {staffWithAppts.length === 0 && !hasAny && allDayAppts.map((appt, i) => renderApptCard(appt, i))}
+            </View>
+          ) : (
+            // Filtered view for a specific staff member
+            <View style={{ padding: 14, gap: 10 }}>
+              <Text style={{ fontSize: 13, color: C.textMuted, marginBottom: 2 }}>
+                {filteredAppts.length} appointment{filteredAppts.length !== 1 ? 's' : ''}
+              </Text>
+              {filteredAppts.map((appt, i) => renderApptCard(appt, i))}
+            </View>
+          )}
         </ScrollView>
       );
     }
