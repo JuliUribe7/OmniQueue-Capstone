@@ -392,11 +392,12 @@ export default function BusinessDashboard() {
         {sColor && item.staffName && (
           <View style={{
             position: 'absolute', top: -16, left: 14, zIndex: 2,
-            backgroundColor: sColor, paddingHorizontal: 10, paddingVertical: 4,
+            backgroundColor: sColor + '22', paddingHorizontal: 10, paddingVertical: 4,
             borderTopLeftRadius: 6, borderTopRightRadius: 6,
+            borderWidth: 1.5, borderBottomWidth: 0, borderColor: sColor,
             flexDirection: 'row', alignItems: 'center', gap: 4,
           }}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>👤 {item.staffName}</Text>
+            <Text style={{ color: '#111827', fontSize: 11, fontWeight: '700' }}>{item.staffName}</Text>
           </View>
         )}
       <View style={[styles.ticketCard, isCalled && styles.ticketCardCalled, compact && styles.ticketCardCompact,
