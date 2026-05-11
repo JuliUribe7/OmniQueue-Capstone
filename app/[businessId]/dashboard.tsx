@@ -343,6 +343,13 @@ export default function BusinessDashboard() {
     return '#6b7280';
   }
 
+  const STAFF_COLORS = ['#2563eb', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#ec4899'];
+  function staffColor(staffId: string | undefined): string | null {
+    if (!staffId) return null;
+    const idx = staff.findIndex(s => s.id === staffId);
+    return STAFF_COLORS[idx >= 0 ? idx % STAFF_COLORS.length : 0];
+  }
+
   // Loading screen
   if (loading) {
     return (
@@ -378,9 +385,24 @@ export default function BusinessDashboard() {
       return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
     })();
     const waitMins = Math.floor((Date.now() - new Date(item.createdAt).getTime()) / 60000);
+    const sColor = staffColor(item.staffId);
     return (
+      <View style={{ marginTop: sColor ? 16 : 0 }}>
+        {sColor && item.staffName && (
+          <View style={{
+            position: 'absolute', top: -16, left: 14, zIndex: 2,
+            backgroundColor: sColor, paddingHorizontal: 10, paddingVertical: 4,
+            borderTopLeftRadius: 6, borderTopRightRadius: 6,
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+          }}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>👤 {item.staffName}</Text>
+          </View>
+        )}
       <View style={[styles.ticketCard, isCalled && styles.ticketCardCalled, compact && styles.ticketCardCompact,
-        { backgroundColor: C.surface, borderColor: isCalled ? '#10b981' : C.border }]}>
+        { backgroundColor: sColor ? sColor + '0d' : C.surface,
+          borderColor: sColor ?? (isCalled ? '#10b981' : C.border),
+          borderWidth: sColor ? 2 : 1,
+          ...(sColor ? { borderTopLeftRadius: 0 } : {}) }]}>
         <View style={styles.ticketTop}>
           <View style={[styles.positionBadge, { backgroundColor: statusColor(item.status) }]}>
             <Text style={styles.positionText}>#{index + 1}</Text>
@@ -401,12 +423,6 @@ export default function BusinessDashboard() {
 
         <View style={styles.ticketMeta}>
           <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
-          {item.staffName && (
-            <>
-              <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-              <Text style={[styles.metaText, { color: C.primary, fontWeight: '600' }]}>👤 {item.staffName}</Text>
-            </>
-          )}
           <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
           <Text style={[styles.metaText, { color: C.textSub }]}>Joined {joinedAt}</Text>
           <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
@@ -440,6 +456,7 @@ export default function BusinessDashboard() {
             </TouchableOpacity>
           </View>
         )}
+      </View>
       </View>
     );
   }
