@@ -167,6 +167,7 @@ async function getStaff(req, res, next) {
 }
 
 async function getPublicStaff(req, res, next) {
+  if (req.params.businessId === 'me') return next('route');
   try {
     const { businessId } = req.params;
     const staffMembers = await businessService.getStaff(businessId);
