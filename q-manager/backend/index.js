@@ -35,3 +35,17 @@ app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Backend listening on http://localhost:${port}`);
 });
+
+// Auto-expire stale queue tickets after 24 hours
+const { query } = require('./src/db');
+setInterval(async () => {
+  try {
+    await query(
+      `UPDATE "Ticket" SET "status" = 'Unserved', "updatedAt" = NOW()
+       WHERE "status" IN ('Waiting', 'Called')
+       AND "createdAt" < NOW() - INTERVAL '24 hours'`,
+    );
+  } catch (e) {
+    console.error('Ticket cleanup failed:', e.message);
+  }
+}, 60 * 60 * 1000); // runs every hour

@@ -326,8 +326,8 @@ export default function BusinessDashboard() {
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
-  const liveTickets    = tickets.filter(t => t.status !== 'Done');
-  const servedToday    = tickets.filter(t => t.status === 'Done');
+  const liveTickets    = tickets.filter(t => t.status !== 'Done' && t.status !== 'Unserved');
+  const servedToday    = tickets.filter(t => t.status === 'Done' || t.status === 'Unserved');
   const waitingTickets = tickets.filter(t => t.status === 'Waiting');
   const calledTickets  = tickets.filter(t => t.status === 'Called');
   const avgWait = waitingTickets.length > 0
@@ -338,8 +338,9 @@ export default function BusinessDashboard() {
   const visibleNavItems = plan === 'pro' ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.tab));
 
   function statusColor(status: ApiTicket['status']) {
-    if (status === 'Called')  return '#10b981';
-    if (status === 'Waiting') return '#f59e0b';
+    if (status === 'Called')    return '#10b981';
+    if (status === 'Waiting')   return '#f59e0b';
+    if (status === 'Unserved')  return '#ef4444';
     return '#6b7280';
   }
 
@@ -663,18 +664,21 @@ export default function BusinessDashboard() {
                 <Text style={styles.navBadgeText}>{servedToday.length}</Text>
               </View>
             </View>
-            {servedToday.map(item => (
-              <View key={item.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: C.border, opacity: 0.7 }]}>
+            {servedToday.map(item => {
+              const isUnserved = item.status === 'Unserved';
+              const doneColor  = isUnserved ? '#ef4444' : '#10b981';
+              return (
+              <View key={item.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: isUnserved ? '#ef444430' : C.border, opacity: 0.85 }]}>
                 <View style={styles.ticketTop}>
-                  <View style={[styles.positionBadge, { backgroundColor: '#10b981' }]}>
-                    <Text style={styles.positionText}>✓</Text>
+                  <View style={[styles.positionBadge, { backgroundColor: doneColor }]}>
+                    <Text style={styles.positionText}>{isUnserved ? '✕' : '✓'}</Text>
                   </View>
                   <View style={styles.customerInfo}>
                     <Text style={[styles.customerName, { color: C.text }]}>{item.customerName}</Text>
                     <Text style={[styles.customerPhone, { color: C.textMuted }]}>{item.phoneNumber}</Text>
                   </View>
-                  <View style={[styles.statusPill, { backgroundColor: '#10b98122' }]}>
-                    <Text style={[styles.statusPillText, { color: '#10b981' }]}>Done</Text>
+                  <View style={[styles.statusPill, { backgroundColor: doneColor + '22' }]}>
+                    <Text style={[styles.statusPillText, { color: doneColor }]}>{isUnserved ? 'Unserved' : 'Done'}</Text>
                   </View>
                 </View>
                 <View style={styles.ticketMeta}>
@@ -689,7 +693,8 @@ export default function BusinessDashboard() {
                   <Text style={[styles.metaText, { color: C.textSub }]}>{timeAgo(item.updatedAt)}</Text>
                 </View>
               </View>
-            ))}
+              );
+            })}
           </>
         )}
       </ScrollView>
@@ -851,7 +856,7 @@ export default function BusinessDashboard() {
   function renderCustomers() {
     const todayKey = new Date().toISOString().split('T')[0];
 
-    const servedCount  = tickets.filter(t => t.status === 'Done').length;
+    const servedCount  = tickets.filter(t => t.status === 'Done' || t.status === 'Unserved').length;
     const totalToday   = tickets.length;
 
     // Scheduled vs walk-in

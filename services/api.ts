@@ -38,7 +38,7 @@ export interface ApiService {
 export interface ApiTicket {
   id: string;
   position: number;
-  status: 'Waiting' | 'Called' | 'Done';
+  status: 'Waiting' | 'Called' | 'Done' | 'Unserved';
   serviceId: string;
   staffId?: string;
   staffName?: string;
