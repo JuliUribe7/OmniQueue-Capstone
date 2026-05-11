@@ -17,7 +17,7 @@ async function getPublicBusiness(req, res, next) {
   try {
     const { businessId } = req.params;
     const res2 = await require('../db').query(
-      `SELECT b.id, b.name, b.type, b."allowStaffSelection",
+      `SELECT b.id, b.name, b.type, b."allowStaffSelection", b."notificationChannel",
               json_agg(json_build_object('id', s.id, 'name', s.name, 'avgTime', s."avgTime")) as services
        FROM "Business" b
        LEFT JOIN "Service" s ON s."businessId" = b.id

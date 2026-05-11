@@ -12,7 +12,7 @@ import { api, ApiStaff } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
 
 type PublicService  = { id: string; name: string; avgTime: number };
-type PublicBusiness = { id: string; name: string; type: string; services: PublicService[]; allowStaffSelection?: boolean };
+type PublicBusiness = { id: string; name: string; type: string; services: PublicService[]; allowStaffSelection?: boolean; notificationChannel?: 'sms' | 'email' | 'both' };
 type ConfirmedBooking = {
   id: string; date: string; time: string;
   serviceId: string; serviceName: string;
@@ -123,7 +123,13 @@ export default function CustomerPortal() {
 
   const services = business.services ?? [];
   const selectedService = services.find(s => s.id === serviceId) ?? services[0];
-  const canJoin = name.trim().length >= 2 && phone.replace(/\D/g, '').length >= 10 && !!selectedService;
+  const notifChannel = business.notificationChannel ?? 'sms';
+  const showPhone = notifChannel !== 'email';
+  const showEmail = notifChannel !== 'sms';
+  const phoneValid = phone.replace(/\D/g, '').length >= 10;
+  const emailValid = email.trim().length >= 5 && email.includes('@');
+  const contactValid = notifChannel === 'sms' ? phoneValid : notifChannel === 'email' ? emailValid : phoneValid || emailValid;
+  const canJoin = name.trim().length >= 2 && contactValid && !!selectedService;
 
   async function handleJoin() {
     if (!canJoin || !selectedService) return;
@@ -151,9 +157,12 @@ export default function CustomerPortal() {
     return booked < maxCap;
   }
 
+  const bookPhoneValid = bookPhone.replace(/\D/g, '').length >= 10;
+  const bookEmailValid = bookEmail.trim().length >= 5 && bookEmail.includes('@');
+  const bookContactValid = notifChannel === 'sms' ? bookPhoneValid : notifChannel === 'email' ? bookEmailValid : bookPhoneValid || bookEmailValid;
   const canBook =
     !!bookServiceId && !!bookDate && !!bookTime &&
-    bookName.trim().length >= 2 && bookPhone.replace(/\D/g, '').length >= 10;
+    bookName.trim().length >= 2 && bookContactValid;
 
   async function handleBook() {
     if (!canBook || !bookSelectedService) return;
@@ -409,14 +418,24 @@ export default function CustomerPortal() {
               <TextInput style={styles.input} value={name} onChangeText={setName}
                 placeholder="First and last name" placeholderTextColor="#9ca3af" autoCapitalize="words" />
 
-              <Text style={styles.fieldLabel}>Phone Number</Text>
-              <TextInput style={styles.input} value={phone} onChangeText={setPhone}
-                placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+              {showPhone && (
+                <>
+                  <Text style={styles.fieldLabel}>Phone Number{notifChannel === 'both' ? ' (optional)' : ''}</Text>
+                  <TextInput style={styles.input} value={phone} onChangeText={setPhone}
+                    placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+                </>
+              )}
 
-              <Text style={styles.fieldLabel}>Email (optional)</Text>
-              <TextInput style={styles.input} value={email} onChangeText={setEmail}
-                placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
-              <Text style={styles.fieldHint}>We'll notify you when it's your turn.</Text>
+              {showEmail && (
+                <>
+                  <Text style={styles.fieldLabel}>Email{notifChannel === 'both' ? ' (optional)' : ''}</Text>
+                  <TextInput style={styles.input} value={email} onChangeText={setEmail}
+                    placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
+                </>
+              )}
+              <Text style={styles.fieldHint}>
+                {notifChannel === 'email' ? "We'll email you when it's your turn." : notifChannel === 'both' ? "We'll notify you when it's your turn." : "We'll text you when it's your turn."}
+              </Text>
 
               {!!joinError && <Text style={styles.errorText}>{joinError}</Text>}
 
@@ -557,14 +576,24 @@ export default function CustomerPortal() {
                   <TextInput style={styles.input} value={bookName} onChangeText={setBookName}
                     placeholder="First and last name" placeholderTextColor="#9ca3af" autoCapitalize="words" />
 
-                  <Text style={styles.fieldLabel}>Phone Number</Text>
-                  <TextInput style={styles.input} value={bookPhone} onChangeText={setBookPhone}
-                    placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+                  {showPhone && (
+                    <>
+                      <Text style={styles.fieldLabel}>Phone Number{notifChannel === 'both' ? ' (optional)' : ''}</Text>
+                      <TextInput style={styles.input} value={bookPhone} onChangeText={setBookPhone}
+                        placeholder="(555) 000-0000" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
+                    </>
+                  )}
 
-                  <Text style={styles.fieldLabel}>Email (optional)</Text>
-                  <TextInput style={styles.input} value={bookEmail} onChangeText={setBookEmail}
-                    placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
-                  <Text style={styles.fieldHint}>We'll send you a reminder on the day of your appointment.</Text>
+                  {showEmail && (
+                    <>
+                      <Text style={styles.fieldLabel}>Email{notifChannel === 'both' ? ' (optional)' : ''}</Text>
+                      <TextInput style={styles.input} value={bookEmail} onChangeText={setBookEmail}
+                        placeholder="you@example.com" placeholderTextColor="#9ca3af" keyboardType="email-address" autoCapitalize="none" />
+                    </>
+                  )}
+                  <Text style={styles.fieldHint}>
+                    {notifChannel === 'email' ? "We'll email you a reminder on the day of your appointment." : notifChannel === 'both' ? "We'll send you a reminder on the day of your appointment." : "We'll text you a reminder on the day of your appointment."}
+                  </Text>
 
                   {!!bookError && <Text style={styles.errorText}>{bookError}</Text>}
 
