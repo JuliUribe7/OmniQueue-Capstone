@@ -1123,9 +1123,6 @@ export default function BusinessDashboard() {
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
             <View>
               <Text style={[styles.sectionTitle, { color: C.text }]}>Staff Members</Text>
-              <Text style={[styles.sectionSub, { color: C.textMuted }]}>
-                Customers choose a staff member when booking.
-              </Text>
             </View>
             {!atLimit && (
               <TouchableOpacity
@@ -1243,41 +1240,46 @@ export default function BusinessDashboard() {
                 </View>
 
                 {/* URL fallback */}
-                <Text style={[styles.fieldLabel, { color: C.textSub, marginTop: 6 }]}>Or paste image URL</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
-                  value={newStaffPhoto.startsWith('data:') ? '' : newStaffPhoto}
-                  onChangeText={setNewStaffPhoto}
-                  placeholder="https://..." placeholderTextColor={C.placeholder}
-                  autoCapitalize="none"
-                />
+                <View style={{ marginTop: 8, gap: 6 }}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>Or paste image URL</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    value={newStaffPhoto.startsWith('data:') ? '' : newStaffPhoto}
+                    onChangeText={setNewStaffPhoto}
+                    placeholder="https://..." placeholderTextColor={C.placeholder}
+                    autoCapitalize="none"
+                  />
+                </View>
 
-                {/* Name */}
-                <Text style={[styles.fieldLabel, { color: C.textSub }]}>Name *</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
-                  value={newStaffName} onChangeText={setNewStaffName}
-                  placeholder="e.g. James Rivera" placeholderTextColor={C.placeholder}
-                  autoCapitalize="words"
-                />
+                <View style={{ marginTop: 12, gap: 6 }}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>Name *</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    value={newStaffName} onChangeText={setNewStaffName}
+                    placeholder="e.g. James Rivera" placeholderTextColor={C.placeholder}
+                    autoCapitalize="words"
+                  />
+                </View>
 
-                {/* Role */}
-                <Text style={[styles.fieldLabel, { color: C.textSub }]}>Role</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
-                  value={newStaffRole} onChangeText={setNewStaffRole}
-                  placeholder="e.g. Barber, Doctor" placeholderTextColor={C.placeholder}
-                  autoCapitalize="words"
-                />
+                <View style={{ marginTop: 12, gap: 6 }}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>Role</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    value={newStaffRole} onChangeText={setNewStaffRole}
+                    placeholder="e.g. Barber, Doctor" placeholderTextColor={C.placeholder}
+                    autoCapitalize="words"
+                  />
+                </View>
 
-                {/* Phone */}
-                <Text style={[styles.fieldLabel, { color: C.textSub }]}>Phone (optional)</Text>
-                <TextInput
-                  style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
-                  value={newStaffPhone} onChangeText={setNewStaffPhone}
-                  placeholder="(555) 000-0000" placeholderTextColor={C.placeholder}
-                  keyboardType="phone-pad"
-                />
+                <View style={{ marginTop: 12, gap: 6 }}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>Phone (optional)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: C.inputBg, borderColor: C.inputBorder, color: C.text }]}
+                    value={newStaffPhone} onChangeText={setNewStaffPhone}
+                    placeholder="(555) 000-0000" placeholderTextColor={C.placeholder}
+                    keyboardType="phone-pad"
+                  />
+                </View>
 
                 {/* Action buttons */}
                 <View style={styles.staffModalBtns}>

@@ -120,6 +120,7 @@ async function updateStaff(staffId, businessId, name, role, phone, photoUrl) {
 }
 
 async function deleteStaff(staffId, businessId) {
+  await query('UPDATE "Appointment" SET "staffId" = NULL WHERE "staffId" = $1', [staffId]);
   const res = await query(
     'DELETE FROM "Staff" WHERE "id" = $1 AND "businessId" = $2 RETURNING *',
     [staffId, businessId],
