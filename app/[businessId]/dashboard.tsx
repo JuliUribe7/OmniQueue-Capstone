@@ -401,6 +401,12 @@ export default function BusinessDashboard() {
 
         <View style={styles.ticketMeta}>
           <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
+          {item.staffName && (
+            <>
+              <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+              <Text style={[styles.metaText, { color: C.primary, fontWeight: '600' }]}>👤 {item.staffName}</Text>
+            </>
+          )}
           <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
           <Text style={[styles.metaText, { color: C.textSub }]}>Joined {joinedAt}</Text>
           <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
@@ -656,6 +662,12 @@ export default function BusinessDashboard() {
                 </View>
                 <View style={styles.ticketMeta}>
                   <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
+                  {item.staffName && (
+                    <>
+                      <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+                      <Text style={[styles.metaText, { color: C.primary, fontWeight: '600' }]}>👤 {item.staffName}</Text>
+                    </>
+                  )}
                   <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
                   <Text style={[styles.metaText, { color: C.textSub }]}>{timeAgo(item.updatedAt)}</Text>
                 </View>

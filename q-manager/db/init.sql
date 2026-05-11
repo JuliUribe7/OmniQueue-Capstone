@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS "Ticket" (
   "position"      INTEGER NOT NULL,
   "status"        TEXT NOT NULL DEFAULT 'Waiting',
   "serviceId"     TEXT NOT NULL REFERENCES "Service"("id") ON DELETE CASCADE,
+  "staffId"       TEXT REFERENCES "Staff"("id") ON DELETE SET NULL,
   "customerName"  TEXT,
   "customerEmail" TEXT,
   "customerToken" TEXT,
@@ -81,6 +82,7 @@ CREATE TABLE IF NOT EXISTS "Ticket" (
   "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE "Ticket" ADD COLUMN IF NOT EXISTS "staffId" TEXT REFERENCES "Staff"("id") ON DELETE SET NULL;
 
 -- Staff table
 CREATE TABLE IF NOT EXISTS "Staff" (

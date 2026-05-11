@@ -82,9 +82,10 @@ async function deleteService(serviceId, businessId) {
 
 async function getQueueForBusiness(businessId) {
   const res = await query(
-    `SELECT t.*, s."name" as "serviceName", s."avgTime"
+    `SELECT t.*, s."name" as "serviceName", s."avgTime", st."name" as "staffName"
      FROM "Ticket" t
      JOIN "Service" s ON t."serviceId" = s."id"
+     LEFT JOIN "Staff" st ON t."staffId" = st."id"
      WHERE s."businessId" = $1
      ORDER BY t."position" ASC`,
     [businessId],

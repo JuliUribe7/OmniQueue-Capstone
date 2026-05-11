@@ -36,12 +36,12 @@ async function getPublicBusiness(req, res, next) {
 async function joinQueue(req, res, next) {
   try {
     const { businessId } = req.params;
-    const { customerName, phoneNumber, customerEmail, serviceId } = req.body;
+    const { customerName, phoneNumber, customerEmail, serviceId, staffId } = req.body;
     if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
     const { v4: uuidv4 } = require('uuid');
     const token = uuidv4();
     const business = await businessService.getBusinessById(businessId);
-    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName, customerEmail, business);
+    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName, customerEmail, business, staffId || null);
     res.status(201).json({ ticket, token });
   } catch (err) {
     next(err);
@@ -146,11 +146,11 @@ async function getQueue(req, res, next) {
 
 async function addWalkin(req, res, next) {
   try {
-    const { customerName, phoneNumber, customerEmail, serviceId } = req.body;
+    const { customerName, phoneNumber, customerEmail, serviceId, staffId } = req.body;
     if (!serviceId) return res.status(400).json({ error: 'serviceId is required' });
     const token = uuidv4();
     const business = await businessService.getBusinessByUser(req.user.id);
-    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName, customerEmail, business);
+    const ticket = await queueService.joinQueue(serviceId, token, phoneNumber, customerName, customerEmail, business, staffId || null);
     res.status(201).json({ ticket });
   } catch (err) {
     next(err);

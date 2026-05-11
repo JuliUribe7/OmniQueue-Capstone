@@ -130,7 +130,7 @@ export default function CustomerPortal() {
     setJoinError('');
     setJoining(true);
     try {
-      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id, email.trim() || undefined);
+      const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id, email.trim() || undefined, staffId !== 'any' ? staffId : undefined);
       router.push(`/${businessId}/waiting?token=${token}`);
     } catch (e: any) {
       setJoinError(e?.message ?? 'Could not join queue. Please try again.');

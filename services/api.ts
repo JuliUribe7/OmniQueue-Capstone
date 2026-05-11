@@ -40,6 +40,8 @@ export interface ApiTicket {
   position: number;
   status: 'Waiting' | 'Called' | 'Done';
   serviceId: string;
+  staffId?: string;
+  staffName?: string;
   customerToken: string;
   phoneNumber: string;
   customerName: string;
@@ -100,10 +102,10 @@ export const api = {
   // Queue (staff)
   getQueue: (): Promise<{ tickets: ApiTicket[] }> =>
     apiFetch('/api/businesses/me/queue'),
-  addWalkin: (customerName: string, phoneNumber: string, serviceId: string) =>
+  addWalkin: (customerName: string, phoneNumber: string, serviceId: string, staffId?: string) =>
     apiFetch('/api/businesses/me/queue/walkin', {
       method: 'POST',
-      body: JSON.stringify({ customerName, phoneNumber, serviceId }),
+      body: JSON.stringify({ customerName, phoneNumber, serviceId, staffId }),
     }),
   markDone: (ticketId: string) =>
     apiFetch(`/api/tickets/${ticketId}/done`, { method: 'PUT' }),
@@ -167,10 +169,10 @@ export const api = {
   // Public (customer-facing, no auth)
   getPublicBusiness: (businessId: string): Promise<{ business: { id: string; name: string; type: string; services: { id: string; name: string; avgTime: number }[] } }> =>
     apiFetch(`/api/businesses/${businessId}/public`),
-  joinQueue: (businessId: string, customerName: string, phoneNumber: string, serviceId: string, customerEmail?: string): Promise<{ ticket: ApiTicket; token: string }> =>
+  joinQueue: (businessId: string, customerName: string, phoneNumber: string, serviceId: string, customerEmail?: string, staffId?: string): Promise<{ ticket: ApiTicket; token: string }> =>
     apiFetch(`/api/businesses/${businessId}/queue/join`, {
       method: 'POST',
-      body: JSON.stringify({ customerName, phoneNumber, serviceId, customerEmail }),
+      body: JSON.stringify({ customerName, phoneNumber, serviceId, customerEmail, staffId }),
     }),
   getTicketByToken: (token: string): Promise<{ ticket: ApiTicket }> =>
     apiFetch(`/api/entries/${token}`),

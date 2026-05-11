@@ -2,7 +2,7 @@ const { pool, query } = require('../db');
 const eventService = require('./eventService');
 const notificationService = require('./notificationService');
 
-async function joinQueue(serviceId, customerToken, phoneNumber, customerName, customerEmail, business) {
+async function joinQueue(serviceId, customerToken, phoneNumber, customerName, customerEmail, business, staffId) {
   // Look up the service
   const serviceRes = await query(
     'SELECT * FROM "Service" WHERE "id" = $1',
@@ -25,10 +25,10 @@ async function joinQueue(serviceId, customerToken, phoneNumber, customerName, cu
 
     const ticketRes = await client.query(
       `INSERT INTO "Ticket"
-         ("position", "status", "serviceId", "customerToken", "phoneNumber", "customerName", "customerEmail", "createdAt", "updatedAt")
-       VALUES ($1, 'Waiting', $2, $3, $4, $5, $6, NOW(), NOW())
+         ("position", "status", "serviceId", "staffId", "customerToken", "phoneNumber", "customerName", "customerEmail", "createdAt", "updatedAt")
+       VALUES ($1, 'Waiting', $2, $3, $4, $5, $6, $7, NOW(), NOW())
        RETURNING *`,
-      [position, serviceId, customerToken, phoneNumber, customerName || null, customerEmail || null],
+      [position, serviceId, staffId || null, customerToken, phoneNumber, customerName || null, customerEmail || null],
     );
     ticket = ticketRes.rows[0];
 
