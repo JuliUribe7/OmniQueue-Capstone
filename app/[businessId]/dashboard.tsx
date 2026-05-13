@@ -858,32 +858,17 @@ export default function BusinessDashboard() {
   function renderCustomers() {
     const todayKey = new Date().toISOString().split('T')[0];
 
-    const servedCount  = tickets.filter(t => t.status === 'Done' || t.status === 'Unserved').length;
-    const totalToday   = tickets.length;
+    // KPI computations
+    const doneCount     = tickets.filter(t => t.status === 'Done').length;
+    const unservedCount = tickets.filter(t => t.status === 'Unserved').length;
+    const noShowRate    = doneCount + unservedCount > 0
+      ? Math.round((unservedCount / (doneCount + unservedCount)) * 100) : 0;
 
-    // Scheduled vs walk-in
-    const todayAppts   = appointments.filter(a => a.date === todayKey);
-    const scheduledCnt = todayAppts.length;
-    const apptPhones   = new Set(todayAppts.map(a => a.phoneNumber));
-    const walkinCnt    = tickets.filter(t =>
-      t.createdAt.startsWith(todayKey) && !apptPhones.has(t.phoneNumber)
-    ).length;
+    // How customers arrive
+    const apptPhones  = new Set(appointments.map(a => a.phoneNumber));
+    const scheduledCnt = appointments.length;
+    const walkinCnt    = tickets.filter(t => !apptPhones.has(t.phoneNumber)).length;
     const totalInflow  = scheduledCnt + walkinCnt || 1;
-
-    // Busiest hours
-    const hourCounts: Record<number, number> = {};
-    tickets.forEach(t => {
-      const h = new Date(t.createdAt).getHours();
-      hourCounts[h] = (hourCounts[h] ?? 0) + 1;
-    });
-    const maxHourCount  = Math.max(1, ...Object.values(hourCounts));
-    const businessHours = Array.from({ length: 12 }, (_, i) => i + 8);
-
-    function fmtHour(h: number) {
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12  = h > 12 ? h - 12 : h === 0 ? 12 : h;
-      return `${h12}${ampm}`;
-    }
 
     // Service breakdown
     const svcCounts: Record<string, number> = {};
@@ -891,27 +876,58 @@ export default function BusinessDashboard() {
     const svcEntries  = Object.entries(svcCounts).sort((a, b) => b[1] - a[1]);
     const maxSvcCount = Math.max(1, ...Object.values(svcCounts));
 
-    // New vs repeat
-    const visitMap: Record<string, number> = {};
+    // Demand heatmap — all tickets by day-of-week × hour
+    const DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const HOURS = Array.from({ length: 11 }, (_, i) => i + 8); // 8am–6pm
+    const heatmap: Record<string, number> = {};
     tickets.forEach(t => {
-      if (t.phoneNumber) visitMap[t.phoneNumber] = (visitMap[t.phoneNumber] ?? 0) + 1;
+      const d = new Date(t.createdAt);
+      const dow = d.getDay();
+      const h   = d.getHours();
+      if (h >= 8 && h <= 18) {
+        const key = `${dow}-${h}`;
+        heatmap[key] = (heatmap[key] ?? 0) + 1;
+      }
     });
-    const uniquePhones = Object.keys(visitMap);
-    const repeatCount  = uniquePhones.filter(p => visitMap[p] > 1).length;
-    const newCount     = uniquePhones.length - repeatCount;
-    const totalUnique  = uniquePhones.length || 1;
+    const maxCell = Math.max(1, ...Object.values(heatmap));
+    function fmtHr(h: number) {
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      return `${h > 12 ? h - 12 : h}${ampm}`;
+    }
+
+    // Customer lifecycle segments
+    const now = Date.now();
+    const phoneVisits: Record<string, number> = {};
+    const phoneLastSeen: Record<string, number> = {};
+    tickets.forEach(t => {
+      if (!t.phoneNumber) return;
+      const ts = new Date(t.createdAt).getTime();
+      phoneVisits[t.phoneNumber] = (phoneVisits[t.phoneNumber] ?? 0) + 1;
+      phoneLastSeen[t.phoneNumber] = Math.max(phoneLastSeen[t.phoneNumber] ?? 0, ts);
+    });
+    let loyal = 0, returning = 0, newCust = 0, atRisk = 0, lapsed = 0;
+    Object.entries(phoneLastSeen).forEach(([phone, lastTs]) => {
+      const days   = (now - lastTs) / 86400000;
+      const visits = phoneVisits[phone];
+      if (visits >= 4)       loyal++;
+      else if (visits >= 2)  returning++;
+      else if (days <= 30)   newCust++;
+      else if (days <= 60)   atRisk++;
+      else                   lapsed++;
+    });
+    const totalLifecycle = loyal + returning + newCust + atRisk + lapsed || 1;
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
 
-        {/* Today at a Glance */}
-        <Text style={[styles.sectionTitle, { color: C.text }]}>Today at a Glance</Text>
+        {/* KPI Strip */}
+        <Text style={[styles.sectionTitle, { color: C.text }]}>Overview</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {[
-            { val: totalToday,          label: 'Total Customers', accent: '#2563eb' },
-            { val: servedCount,         label: 'Served',           accent: '#10b981' },
-            { val: liveTickets.length,  label: 'In Queue Now',     accent: '#f59e0b' },
-            { val: `${avgWait}m`,       label: 'Avg Wait',         accent: '#8b5cf6' },
+            { val: doneCount + unservedCount, label: 'Total Served',    accent: '#2563eb' },
+            { val: `${noShowRate}%`,          label: 'No-show Rate',    accent: noShowRate > 20 ? '#ef4444' : '#10b981' },
+            { val: liveTickets.length,        label: 'In Queue Now',    accent: '#f59e0b' },
+            { val: `${avgWait}m`,             label: 'Avg Wait',        accent: '#8b5cf6' },
           ].map(({ val, label, accent }) => (
             <View key={label} style={[styles.analyticStatCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
               <Text style={[styles.analyticStatNum, { color: accent }]}>{val}</Text>
@@ -923,7 +939,7 @@ export default function BusinessDashboard() {
         {/* How Customers Come In */}
         <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={[styles.analyticCardTitle, { color: C.text }]}>How Customers Come In</Text>
-          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Scheduled appointments vs same-day walk-ins</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>All-time appointments vs walk-ins</Text>
           <View style={{ gap: 14, marginTop: 14 }}>
             {[
               { label: 'Scheduled Appointments', count: scheduledCnt, color: '#2563eb' },
@@ -939,48 +955,51 @@ export default function BusinessDashboard() {
                     width: `${Math.round((count / totalInflow) * 100)}%` as any }} />
                 </View>
                 <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 3 }}>
-                  {Math.round((count / totalInflow) * 100)}% of today's traffic
+                  {Math.round((count / totalInflow) * 100)}% of all traffic
                 </Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Busiest Hours */}
+        {/* Demand Heatmap */}
         <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Busiest Hours</Text>
-          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Customer volume by time of day</Text>
+          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Busiest Hours by Day</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Darker = more customers at that hour</Text>
           {tickets.length === 0 ? (
-            <Text style={{ color: C.textMuted, fontSize: 13, marginTop: 12 }}>No data yet for today</Text>
+            <Text style={{ color: C.textMuted, fontSize: 13, marginTop: 12 }}>No data yet — add customers to see the heatmap</Text>
           ) : (
-            <View style={{ gap: 5, marginTop: 14 }}>
-              {businessHours.map(h => {
-                const cnt  = hourCounts[h] ?? 0;
-                const pct  = Math.round((cnt / maxHourCount) * 100);
-                const peak = cnt === maxHourCount && cnt > 0;
-                return (
-                  <View key={h} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ fontSize: 11, color: C.textMuted, width: 36, textAlign: 'right' }}>{fmtHour(h)}</Text>
-                    <View style={{ flex: 1, height: 16, backgroundColor: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
-                      {cnt > 0 && (
-                        <View style={{ height: 16, borderRadius: 4,
-                          backgroundColor: peak ? '#2563eb' : '#2563eb55',
-                          width: `${pct}%` as any }} />
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 11, fontWeight: '600', color: peak ? '#2563eb' : C.textMuted, width: 16 }}>
-                      {cnt > 0 ? cnt : ''}
-                    </Text>
-                    {peak ? <Text style={{ fontSize: 10, color: '#2563eb', fontWeight: '700', width: 30 }}>Peak</Text>
-                           : <View style={{ width: 30 }} />}
-                  </View>
-                );
-              })}
+            <View style={{ marginTop: 14, gap: 3 }}>
+              {/* Hour labels */}
+              <View style={{ flexDirection: 'row', paddingLeft: 32, gap: 2 }}>
+                {HOURS.map(h => (
+                  <Text key={h} style={{ flex: 1, fontSize: 8, color: C.textMuted, textAlign: 'center' }}>
+                    {fmtHr(h)}
+                  </Text>
+                ))}
+              </View>
+              {/* Day rows */}
+              {DAYS.map((day, di) => (
+                <View key={day} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                  <Text style={{ width: 28, fontSize: 10, color: C.textMuted, fontWeight: '600' }}>{day}</Text>
+                  {HOURS.map(h => {
+                    const cnt = heatmap[`${di}-${h}`] ?? 0;
+                    const intensity = cnt > 0 ? 0.15 + (cnt / maxCell) * 0.8 : 0;
+                    return (
+                      <View key={h} style={{ flex: 1, height: 22, borderRadius: 3,
+                        backgroundColor: cnt > 0
+                          ? `rgba(37,99,235,${intensity.toFixed(2)})`
+                          : C.surfaceAlt,
+                      }} />
+                    );
+                  })}
+                </View>
+              ))}
             </View>
           )}
         </View>
 
-        {/* Service Breakdown */}
+        {/* Most Popular Services */}
         <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
           <Text style={[styles.analyticCardTitle, { color: C.text }]}>Most Popular Services</Text>
           <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Ranked by number of customers</Text>
@@ -1008,19 +1027,27 @@ export default function BusinessDashboard() {
           )}
         </View>
 
-        {/* New vs Repeat */}
+        {/* Customer Lifecycle */}
         <View style={[styles.analyticCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Customer Retention</Text>
-          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>New vs returning customers</Text>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+          <Text style={[styles.analyticCardTitle, { color: C.text }]}>Customer Lifecycle</Text>
+          <Text style={[styles.analyticCardSub, { color: C.textMuted }]}>Where your customers stand today</Text>
+          <View style={{ gap: 10, marginTop: 14 }}>
             {[
-              { label: 'New Customers', count: newCount,    color: '#10b981', pct: Math.round((newCount / totalUnique) * 100) },
-              { label: 'Returning',     count: repeatCount, color: '#2563eb', pct: Math.round((repeatCount / totalUnique) * 100) },
-            ].map(({ label, count, color, pct }) => (
-              <View key={label} style={{ flex: 1, backgroundColor: C.surfaceAlt, borderRadius: 12, padding: 14, alignItems: 'center', gap: 4 }}>
-                <Text style={{ fontSize: 28, fontWeight: '800', color }}>{count}</Text>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: C.textSub }}>{label}</Text>
-                <Text style={{ fontSize: 11, color: C.textMuted }}>{pct}% of total</Text>
+              { label: 'Loyal',      count: loyal,     desc: '4+ visits',           color: '#2563eb' },
+              { label: 'Returning',  count: returning, desc: '2–3 visits',           color: '#10b981' },
+              { label: 'New',        count: newCust,   desc: 'First visit <30 days', color: '#8b5cf6' },
+              { label: 'At-risk',    count: atRisk,    desc: 'Silent 30–60 days',    color: '#f59e0b' },
+              { label: 'Lapsed',     count: lapsed,    desc: 'Silent 60+ days',      color: '#ef4444' },
+            ].map(({ label, count, desc, color }) => (
+              <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: color }} />
+                <Text style={{ fontSize: 13, fontWeight: '600', color: C.text, width: 72 }}>{label}</Text>
+                <View style={{ flex: 1, height: 8, backgroundColor: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
+                  <View style={{ height: 8, borderRadius: 4, backgroundColor: color,
+                    width: `${Math.round((count / totalLifecycle) * 100)}%` as any }} />
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: '700', color, width: 24, textAlign: 'right' }}>{count}</Text>
+                <Text style={{ fontSize: 11, color: C.textMuted, width: 100 }}>{desc}</Text>
               </View>
             ))}
           </View>

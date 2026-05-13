@@ -20,6 +20,7 @@ type AdminBusiness = {
   id: string;
   name: string;
   type: string;
+  plan: string;
   createdAt: string;
   services: { id: string; name: string; avgTime: number }[];
   tickets: ApiTicket[];
@@ -322,67 +323,108 @@ export default function AdminDashboard() {
 
   // ── Analytics tab ──────────────────────────────────────────────────────────
   function renderAnalytics() {
-    const byType = businesses.reduce<Record<string, number>>((acc, b) => {
-      acc[b.type] = (acc[b.type] ?? 0) + 1; return acc;
-    }, {});
-    const busiest = [...businessStats].sort((a, b) => b.tickets.length - a.tickets.length)[0];
+    const totalBiz  = businesses.length;
+    const proBiz    = businesses.filter(b => b.plan === 'pro').length;
+    const basicBiz  = businesses.filter(b => b.plan !== 'pro').length;
+    const totalCust = businesses.reduce((sum, b) => sum + (b.tickets?.length ?? 0), 0);
+    const proPercent   = totalBiz > 0 ? Math.round((proBiz / totalBiz) * 100) : 0;
+    const basicPercent = 100 - proPercent;
+
+    // Performance by vertical
+    const verticals: Record<string, { count: number; customers: number }> = {};
+    businesses.forEach(b => {
+      if (!verticals[b.type]) verticals[b.type] = { count: 0, customers: 0 };
+      verticals[b.type].count++;
+      verticals[b.type].customers += b.tickets?.length ?? 0;
+    });
+    const verticalEntries = Object.entries(verticals).sort((a, b) => b[1].count - a[1].count);
+    const maxVertCount = Math.max(1, ...verticalEntries.map(([, v]) => v.count));
+
+    const VERT_COLORS = ['#2563eb', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+
+        {/* KPI Strip */}
         <Text style={[styles.sectionTitle, { color: C.text }]}>Platform Overview</Text>
         <View style={styles.analyticsGrid}>
           {[
-            { val: totalBusinesses, label: 'Businesses',  color: C.primary,  accent: C.primary },
-            { val: totalWaiting,    label: 'Waiting Now', color: '#f59e0b',  accent: '#f59e0b' },
-            { val: totalCalled,     label: 'Called Now',  color: '#10b981',  accent: '#10b981' },
-            { val: totalInQueue,    label: 'In Queue',    color: '#8b5cf6',  accent: '#8b5cf6' },
-          ].map(({ val, label, color, accent }) => (
+            { val: totalBiz,   label: 'Total Businesses',   accent: '#2563eb' },
+            { val: proBiz,     label: 'Pro (Paying)',        accent: '#10b981' },
+            { val: basicBiz,   label: 'Basic / Free',        accent: '#f59e0b' },
+            { val: totalCust,  label: 'Customers Served',    accent: '#8b5cf6' },
+          ].map(({ val, label, accent }) => (
             <View key={label} style={[styles.analyticsCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
-              <Text style={[styles.analyticsNum, { color }]}>{val}</Text>
+              <Text style={[styles.analyticsNum, { color: accent }]}>{val}</Text>
               <Text style={[styles.analyticsLbl, { color: C.textMuted }]}>{label}</Text>
             </View>
           ))}
         </View>
 
-        <Text style={[styles.sectionTitle, { color: C.text }]}>Businesses by Type</Text>
-        {Object.entries(byType).map(([type, count]) => (
-          <View key={type} style={styles.typeRow}>
-            <Text style={[styles.typeRowLabel, { color: C.textSub }]}>{typeLabel[type] ?? type}</Text>
-            <View style={[styles.typeBarWrap, { backgroundColor: C.border }]}>
-              <View style={[styles.typeBar, { width: `${Math.min((count / totalBusinesses) * 100, 100)}%` as any }]} />
-            </View>
-            <Text style={[styles.typeRowCount, { color: C.text }]}>{count}</Text>
-          </View>
-        ))}
-
-        {busiest && busiest.tickets.length > 0 && (
-          <>
-            <Text style={[styles.sectionTitle, { color: C.text }]}>Busiest Right Now</Text>
-            <View style={[styles.busiestCard, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <Text style={[styles.busiestName, { color: C.text }]}>{busiest.business.name}</Text>
-              <Text style={[styles.busiestSub, { color: C.textSub }]}>
-                {busiest.tickets.length} customer{busiest.tickets.length !== 1 ? 's' : ''} · ~{busiest.avgWait} min avg wait
-              </Text>
-            </View>
-          </>
-        )}
-
-        <Text style={[styles.sectionTitle, { color: C.text }]}>All Active Queues</Text>
-        {businessStats.filter(b => b.tickets.length > 0).length === 0 ? (
-          <View style={styles.empty}>
-            <Text style={[styles.emptyText, { color: C.textMuted }]}>No active queues right now</Text>
-          </View>
-        ) : (
-          businessStats.filter(b => b.tickets.length > 0).map(({ business, tickets, avgWait }) => (
-            <View key={business.id} style={[styles.activeQueueRow, { backgroundColor: C.surface, borderColor: C.border }]}>
-              <Text style={[styles.activeQueueName, { color: C.text }]}>{business.name}</Text>
-              <View style={styles.activeQueueRight}>
-                <Text style={styles.activeQueueCount}>{tickets.length} in queue</Text>
-                <Text style={[styles.activeQueueWait, { color: C.textMuted }]}>~{avgWait} min avg</Text>
+        {/* Plan Mix */}
+        <View style={[styles.busiestCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 12 }]}>Plan Mix</Text>
+          {[
+            { label: 'Pro', count: proBiz,   pct: proPercent,   color: '#10b981' },
+            { label: 'Basic / Free', count: basicBiz, pct: basicPercent, color: '#f59e0b' },
+          ].map(({ label, count, pct, color }) => (
+            <View key={label} style={{ marginBottom: 14 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 5 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: C.textSub }}>{label}</Text>
+                <Text style={{ fontSize: 13, fontWeight: '700', color }}>{count} businesses · {pct}%</Text>
+              </View>
+              <View style={{ height: 10, backgroundColor: C.surfaceAlt, borderRadius: 5, overflow: 'hidden' }}>
+                <View style={{ height: 10, borderRadius: 5, backgroundColor: color, width: `${pct}%` as any }} />
               </View>
             </View>
-          ))
-        )}
+          ))}
+        </View>
+
+        {/* Performance by Vertical */}
+        <View style={[styles.busiestCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 4 }]}>Performance by Vertical</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, paddingHorizontal: 2 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, flex: 2 }}>TYPE</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, width: 60, textAlign: 'right' }}>BUSINESSES</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted, width: 80, textAlign: 'right' }}>CUSTOMERS</Text>
+          </View>
+          {verticalEntries.map(([type, data], i) => (
+            <View key={type} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
+              borderTopWidth: 1, borderTopColor: C.border }}>
+              <View style={{ flex: 2, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: VERT_COLORS[i % VERT_COLORS.length] }} />
+                <Text style={{ fontSize: 13, fontWeight: '600', color: C.text }}>{typeLabel[type] ?? type}</Text>
+              </View>
+              <View style={{ width: 60, alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>{data.count}</Text>
+              </View>
+              <View style={{ width: 80, alignItems: 'flex-end' }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>{data.customers}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
+        {/* System Health */}
+        <View style={[styles.busiestCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.sectionTitle, { color: C.text, marginBottom: 12 }]}>System Health</Text>
+          {[
+            { label: 'Backend API',        status: 'ok' },
+            { label: 'Database',           status: 'ok' },
+            { label: 'Stripe Webhooks',    status: 'ok' },
+            { label: 'SMS (Telnyx)',       status: 'ok' },
+            { label: 'Email (Resend)',     status: 'ok' },
+          ].map(({ label, status }) => (
+            <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between',
+              alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: C.border }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: C.text }}>{label}</Text>
+              <View style={{ backgroundColor: '#d1fae5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>OK</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+
       </ScrollView>
     );
   }

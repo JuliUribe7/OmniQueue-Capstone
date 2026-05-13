@@ -164,7 +164,7 @@ export const api = {
     apiFetch('/api/google/status'),
 
   // Admin
-  getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
+  getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; plan: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
     apiFetch('/api/admin/businesses'),
 
   // Public (customer-facing, no auth)

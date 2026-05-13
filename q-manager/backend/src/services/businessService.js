@@ -182,7 +182,7 @@ async function updateSubscription(businessId, plan) {
 
 async function getAllBusinessesWithQueues() {
   const res = await query(
-    `SELECT b.id, b.name, b.type,
+    `SELECT b.id, b.name, b.type, b.plan, b."createdAt",
             json_agg(DISTINCT jsonb_build_object('id', s.id, 'name', s.name, 'avgTime', s."avgTime")) as services,
             json_agg(DISTINCT jsonb_build_object(
               'id', t.id, 'position', t.position, 'status', t.status,
