@@ -1,6 +1,7 @@
 const { pool, query } = require('../db');
 const eventService = require('./eventService');
 const notificationService = require('./notificationService');
+const { sendEmail } = require('./resendService');
 
 async function joinQueue(serviceId, customerToken, phoneNumber, customerName, customerEmail, business, staffId) {
   // Look up the service
@@ -103,7 +104,36 @@ async function markTicketDone(ticketId) {
     `UPDATE "Ticket" SET "status" = 'Done', "updatedAt" = NOW() WHERE "id" = $1 RETURNING *`,
     [ticketId],
   );
-  return res.rows[0] || null;
+  const ticket = res.rows[0] || null;
+
+  // Send review request email if customer provided email
+  if (ticket && ticket.customerEmail) {
+    try {
+      const serviceRes = await query(
+        `SELECT s."name", b."id" as "businessId", b."name" as "businessName"
+         FROM "Service" s JOIN "Business" b ON s."businessId" = b.id
+         WHERE s.id = $1`,
+        [ticket.serviceId],
+      );
+      const row = serviceRes.rows[0];
+      if (row) {
+        const reviewUrl = `${process.env.FRONTEND_URL}/${row.businessId}?review=${ticket.id}`;
+        sendEmail(
+          ticket.customerEmail,
+          `How was your visit to ${row.businessName}?`,
+          `<p>Hi ${ticket.customerName || 'there'},</p>
+           <p>Thank you for visiting <strong>${row.businessName}</strong>!</p>
+           <p>We'd love to hear about your experience. It only takes a second:</p>
+           <p><a href="${reviewUrl}" style="background:#0a7ea4;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;">Leave a Review ★</a></p>
+           <p>Thanks for using OmniQueue!</p>`,
+        ).catch((err) => console.error('Review email failed:', err.message));
+      }
+    } catch (e) {
+      console.error('Failed to send review email:', e.message);
+    }
+  }
+
+  return ticket;
 }
 
 async function removeTicket(ticketId) {
