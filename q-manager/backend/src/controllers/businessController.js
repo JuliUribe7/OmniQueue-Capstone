@@ -3,6 +3,7 @@ const queueService = require('../services/queueService');
 const { v4: uuidv4 } = require('uuid');
 const { generateICS } = require('../services/icsService');
 const { sendEmail } = require('../services/resendService');
+const { createFunnelEvent } = require('../services/eventService');
 
 async function getAllBusinesses(req, res, next) {
   try {
@@ -291,6 +292,29 @@ async function updateSubscription(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function logFunnelEvent(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const { type, metadata } = req.body;
+    const allowed = ['portal_view', 'staff_selected', 'time_selected', 'confirmed'];
+    if (!type || !allowed.includes(type))
+      return res.status(400).json({ error: `type must be one of: ${allowed.join(', ')}` });
+    const event = await createFunnelEvent(businessId, type, metadata || {});
+    res.status(201).json({ event });
+  } catch (err) { next(err); }
+}
+
+async function getTicketAnalytics(req, res, next) {
+  try {
+    const { start, end } = req.query;
+    if (!start || !end) return res.status(400).json({ error: 'start and end query params are required' });
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const tickets = await businessService.getTicketsByDateRange(business.id, start, end);
+    res.json({ tickets });
+  } catch (err) { next(err); }
+}
+
 module.exports = {
   getAllBusinesses,
   getPublicBusiness,
@@ -314,4 +338,6 @@ module.exports = {
   getMyAppointments,
   getSubscription,
   updateSubscription,
+  getTicketAnalytics,
+  logFunnelEvent,
 };

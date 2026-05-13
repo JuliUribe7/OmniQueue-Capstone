@@ -10,6 +10,7 @@ router.post('/api/businesses/:businessId/queue/join', businessController.joinQue
 router.post('/api/businesses/:businessId/appointments', businessController.createAppointment);
 router.get('/api/businesses/:businessId/appointments/public', businessController.getPublicAppointments);
 router.get('/api/businesses/:businessId/staff', businessController.getPublicStaff);
+router.post('/api/businesses/:businessId/funnel-event', businessController.logFunnelEvent);
 
 router.use(requireAuth);
 
@@ -40,5 +41,8 @@ router.get('/api/businesses/me/appointments', businessController.getMyAppointmen
 // Subscription
 router.get('/api/businesses/me/subscription', businessController.getSubscription);
 router.put('/api/businesses/me/subscription', businessController.updateSubscription);
+
+// Analytics
+router.get('/api/businesses/me/analytics/tickets', businessController.getTicketAnalytics);
 
 module.exports = router;

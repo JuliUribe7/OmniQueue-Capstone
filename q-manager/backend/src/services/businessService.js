@@ -180,9 +180,23 @@ async function updateSubscription(businessId, plan) {
   return res.rows[0] || null;
 }
 
+async function getTicketsByDateRange(businessId, start, end) {
+  const res = await query(
+    `SELECT t.*, s."name" as "serviceName"
+     FROM "Ticket" t
+     JOIN "Service" s ON t."serviceId" = s."id"
+     WHERE s."businessId" = $1
+       AND t."createdAt" >= $2::date
+       AND t."createdAt" < ($3::date + INTERVAL '1 day')
+     ORDER BY t."createdAt" ASC`,
+    [businessId, start, end],
+  );
+  return res.rows;
+}
+
 async function getAllBusinessesWithQueues() {
   const res = await query(
-    `SELECT b.id, b.name, b.type, b.plan, b."createdAt",
+    `SELECT b.id, b.name, b.type, b.plan, b."smsSentTotal", b."emailSentTotal", b."createdAt",
             json_agg(DISTINCT jsonb_build_object('id', s.id, 'name', s.name, 'avgTime', s."avgTime")) as services,
             json_agg(DISTINCT jsonb_build_object(
               'id', t.id, 'position', t.position, 'status', t.status,
@@ -218,5 +232,6 @@ module.exports = {
   getAllAppointments,
   getSubscription,
   updateSubscription,
+  getTicketsByDateRange,
   getAllBusinessesWithQueues,
 };

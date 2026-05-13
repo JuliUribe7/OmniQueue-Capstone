@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS "Business" (
   "plan"                TEXT NOT NULL DEFAULT 'basic',
   "notificationChannel" TEXT NOT NULL DEFAULT 'sms',
   "googleTokens"        TEXT,
+  "smsSentTotal"        INTEGER NOT NULL DEFAULT 0,
+  "emailSentTotal"      INTEGER NOT NULL DEFAULT 0,
   "createdAt"           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"           TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -84,6 +86,8 @@ CREATE TABLE IF NOT EXISTS "Ticket" (
 );
 ALTER TABLE "Ticket" ADD COLUMN IF NOT EXISTS "staffId" TEXT REFERENCES "Staff"("id") ON DELETE SET NULL;
 ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "allowStaffSelection" BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "smsSentTotal" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "emailSentTotal" INTEGER NOT NULL DEFAULT 0;
 
 -- Staff table
 CREATE TABLE IF NOT EXISTS "Staff" (
@@ -117,4 +121,12 @@ CREATE TABLE IF NOT EXISTS "Event" (
   "type"      TEXT NOT NULL,
   "metadata"  JSONB,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "FunnelEvent" (
+  "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "businessId" TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
+  "type"       TEXT NOT NULL,
+  "metadata"   JSONB,
+  "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
