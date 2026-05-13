@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { api, ApiStaff } from '../../services/api';
+import { api, ApiStaff, ApiReview, ApiReviewStats } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
 
 type PublicService  = { id: string; name: string; avgTime: number };
@@ -43,7 +43,7 @@ function formatTime(t: string): string {
 
 export default function CustomerPortal() {
   const router = useRouter();
-  const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  const { businessId, review: reviewTicketId } = useLocalSearchParams<{ businessId: string; review?: string }>();
 
   const [business, setBusiness]   = useState<PublicBusiness | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -76,6 +76,16 @@ export default function CustomerPortal() {
   const [booking, setBooking]             = useState(false);
   const [calMonth, setCalMonth]           = useState<Date>(() => { const d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d; });
 
+  // Review state
+  const [reviewRating, setReviewRating]   = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewName, setReviewName]       = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewDone, setReviewDone]       = useState(false);
+  const [reviewError, setReviewError]     = useState('');
+  const [publicReviews, setPublicReviews] = useState<ApiReview[]>([]);
+  const [reviewStats, setReviewStats]     = useState<ApiReviewStats | null>(null);
+
   // Fetch booked slots — re-runs when date or selected staff changes
   useEffect(() => {
     if (!bookDate || !businessId) return;
@@ -94,6 +104,7 @@ export default function CustomerPortal() {
           setBookServiceId(biz.services[0].id);
         }
         api.getPublicStaff(businessId).then(r => setStaffList(r.staff)).catch(() => {});
+        api.getPublicReviews(businessId).then(r => { setPublicReviews(r.reviews); setReviewStats(r.stats); }).catch(() => {});
       })
       .catch(() => setLoadError('Business not found or no longer available.'))
       .finally(() => setLoading(false));
@@ -116,6 +127,84 @@ export default function CustomerPortal() {
           <Text style={styles.errorIcon}>🔍</Text>
           <Text style={styles.errorTitle}>Business not found</Text>
           <Text style={styles.errorSub}>{loadError || 'This link may be invalid.'}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Review form screen ────────────────────────────────────────────────────
+  if (reviewTicketId && !reviewDone) {
+    async function handleSubmitReview() {
+      if (!reviewRating || !reviewName.trim()) return;
+      setReviewSubmitting(true);
+      setReviewError('');
+      try {
+        await api.submitReview(businessId, reviewTicketId!, reviewName.trim(), reviewRating, reviewComment.trim() || undefined);
+        setReviewDone(true);
+      } catch (e: any) {
+        setReviewError(e?.message ?? 'Could not submit review. Please try again.');
+      } finally {
+        setReviewSubmitting(false);
+      }
+    }
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <ScrollView contentContainerStyle={[styles.scroll, { justifyContent: 'center', minHeight: '100%' }]}>
+          <View style={styles.header}>
+            <Text style={styles.businessName}>{business.name}</Text>
+          </View>
+          <View style={[styles.card, { alignItems: 'center' }]}>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: '#111827', marginBottom: 6 }}>How was your visit?</Text>
+            <Text style={{ fontSize: 14, color: '#6b7280', marginBottom: 20, textAlign: 'center' }}>
+              Your feedback helps {business.name} improve.
+            </Text>
+            {/* Stars */}
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <TouchableOpacity key={star} onPress={() => setReviewRating(star)} activeOpacity={0.7}>
+                  <Text style={{ fontSize: 40, color: star <= reviewRating ? '#f59e0b' : '#d1d5db' }}>★</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {/* Name */}
+            <Text style={[styles.fieldLabel, { alignSelf: 'flex-start' }]}>Your Name</Text>
+            <TextInput style={[styles.input, { width: '100%' }]} value={reviewName} onChangeText={setReviewName}
+              placeholder="First name" placeholderTextColor="#9ca3af" autoCapitalize="words" />
+            {/* Comment */}
+            <Text style={[styles.fieldLabel, { alignSelf: 'flex-start' }]}>Comment (optional)</Text>
+            <TextInput
+              style={[styles.input, { width: '100%', height: 90, textAlignVertical: 'top' }]}
+              value={reviewComment} onChangeText={setReviewComment}
+              placeholder="Tell us about your experience..." placeholderTextColor="#9ca3af"
+              multiline numberOfLines={3}
+            />
+            {!!reviewError && <Text style={styles.errorText}>{reviewError}</Text>}
+            <TouchableOpacity
+              style={[styles.joinBtn, { width: '100%', marginTop: 8 },
+                (!reviewRating || !reviewName.trim() || reviewSubmitting) && styles.joinBtnDisabled]}
+              onPress={handleSubmitReview}
+              disabled={!reviewRating || !reviewName.trim() || reviewSubmitting}
+              activeOpacity={0.85}
+            >
+              {reviewSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.joinBtnText}>Submit Review</Text>}
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (reviewTicketId && reviewDone) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 48, marginBottom: 16 }}>🌟</Text>
+          <Text style={{ fontSize: 22, fontWeight: '800', color: '#111827', marginBottom: 8 }}>Thanks for your review!</Text>
+          <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>
+            Your feedback helps {business.name} serve you better.
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -604,6 +693,38 @@ export default function CustomerPortal() {
                   </TouchableOpacity>
                 </>
               )}
+            </View>
+          )}
+
+          {/* Reviews section */}
+          {reviewStats && reviewStats.total > 0 && (
+            <View style={[styles.card, { gap: 10 }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ fontSize: 32, fontWeight: '800', color: '#111827' }}>
+                  {reviewStats.average.toFixed(1)}
+                </Text>
+                <View>
+                  <View style={{ flexDirection: 'row', gap: 2 }}>
+                    {[1,2,3,4,5].map(s => (
+                      <Text key={s} style={{ fontSize: 18, color: s <= Math.round(reviewStats!.average) ? '#f59e0b' : '#d1d5db' }}>★</Text>
+                    ))}
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{reviewStats.total} review{reviewStats.total !== 1 ? 's' : ''}</Text>
+                </View>
+              </View>
+              {publicReviews.slice(0, 3).map(r => (
+                <View key={r.id} style={{ borderTopWidth: 1, borderTopColor: '#f3f4f6', paddingTop: 10, gap: 4 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#111827' }}>{r.customerName}</Text>
+                    <View style={{ flexDirection: 'row', gap: 1 }}>
+                      {[1,2,3,4,5].map(s => (
+                        <Text key={s} style={{ fontSize: 12, color: s <= r.rating ? '#f59e0b' : '#d1d5db' }}>★</Text>
+                      ))}
+                    </View>
+                  </View>
+                  {!!r.comment && <Text style={{ fontSize: 13, color: '#4b5563' }}>{r.comment}</Text>}
+                </View>
+              ))}
             </View>
           )}
 

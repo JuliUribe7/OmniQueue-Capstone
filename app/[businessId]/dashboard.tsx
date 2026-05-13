@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BorderRadius, Spacing } from '../../constants/theme';
 import { api, ApiBusiness, ApiService, ApiTicket, ApiStaff } from '../../services/api';
 
-type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'appointments' | 'customers' | 'subscription' | 'settings';
+type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'appointments' | 'customers' | 'reviews' | 'subscription' | 'settings';
 
 const LIGHT = {
   bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#f0f2f5', border: '#e2e8f0',
@@ -42,6 +42,7 @@ const NAV_ITEMS: { tab: Tab; icon: string; label: string }[] = [
   { tab: 'staff',        icon: '👤', label: 'Staff'        },
   { tab: 'appointments', icon: '📅', label: 'Appointments' },
   { tab: 'customers',    icon: '📊', label: 'Analytics'    },
+  { tab: 'reviews',      icon: '⭐', label: 'Reviews'      },
   { tab: 'subscription', icon: '💳', label: 'Subscription' },
   { tab: 'settings',     icon: '🔧', label: 'Settings'     },
 ];
@@ -142,6 +143,10 @@ export default function BusinessDashboard() {
   const [calView, setCalView] = useState<'today' | 'week' | 'month'>('today');
   const [apptStaffFilter, setApptStaffFilter] = useState<string>('all');
 
+  // Reviews
+  const [reviews, setReviews] = useState<import('../../services/api').ApiReview[]>([]);
+  const [reviewStats, setReviewStats] = useState<import('../../services/api').ApiReviewStats | null>(null);
+
   // Google Calendar
   const [googleConnected, setGoogleConnected]   = useState(false);
   const [googleConnecting, setGoogleConnecting] = useState(false);
@@ -173,6 +178,7 @@ export default function BusinessDashboard() {
     if (!rawTokens) {
       // Just check current status
       api.getGoogleStatus().then(r => setGoogleConnected(r.connected)).catch(() => {});
+      api.getMyReviews().then(r => { setReviews(r.reviews); setReviewStats(r.stats); }).catch(() => {});
       const clean = window.location.pathname;
       if (isSuccess) window.history.replaceState({}, '', clean);
       return;
@@ -924,10 +930,10 @@ export default function BusinessDashboard() {
         <Text style={[styles.sectionTitle, { color: C.text }]}>Overview</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {[
-            { val: doneCount + unservedCount, label: 'Total Served',    accent: '#2563eb' },
-            { val: `${noShowRate}%`,          label: 'No-show Rate',    accent: noShowRate > 20 ? '#ef4444' : '#10b981' },
-            { val: liveTickets.length,        label: 'In Queue Now',    accent: '#f59e0b' },
-            { val: `${avgWait}m`,             label: 'Avg Wait',        accent: '#8b5cf6' },
+            { val: doneCount + unservedCount,                                            label: 'Total Served',  accent: '#2563eb' },
+            { val: `${noShowRate}%`,                                                     label: 'No-show Rate',  accent: noShowRate > 20 ? '#ef4444' : '#10b981' },
+            { val: reviewStats ? `${reviewStats.average.toFixed(1)} ★` : '—',           label: 'Avg Rating',    accent: '#f59e0b' },
+            { val: reviewStats ? reviewStats.total : '—',                                label: 'Total Reviews', accent: '#8b5cf6' },
           ].map(({ val, label, accent }) => (
             <View key={label} style={[styles.analyticStatCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
               <Text style={[styles.analyticStatNum, { color: accent }]}>{val}</Text>
@@ -1474,6 +1480,83 @@ export default function BusinessDashboard() {
             </Text>
           </View>
         )}
+      </ScrollView>
+    );
+  }
+
+  // ── Reviews tab ────────────────────────────────────────────────────────────
+  function renderReviews() {
+    const STAR_KEYS = [
+      { label: '5 stars', count: reviewStats?.five  ?? 0 },
+      { label: '4 stars', count: reviewStats?.four  ?? 0 },
+      { label: '3 stars', count: reviewStats?.three ?? 0 },
+      { label: '2 stars', count: reviewStats?.two   ?? 0 },
+      { label: '1 star',  count: reviewStats?.one   ?? 0 },
+    ];
+    const maxBar = Math.max(1, ...STAR_KEYS.map(s => s.count));
+
+    if (!reviewStats || reviewStats.total === 0) {
+      return (
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 40, marginBottom: 12 }}>⭐</Text>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>No reviews yet</Text>
+          <Text style={[styles.sectionSub, { color: C.textMuted, textAlign: 'center' }]}>
+            Reviews are sent automatically when you mark a customer as Done.
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+
+        {/* Stats card */}
+        <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ fontSize: 48, fontWeight: '800', color: C.text }}>{reviewStats.average.toFixed(1)}</Text>
+              <View style={{ flexDirection: 'row', gap: 2 }}>
+                {[1,2,3,4,5].map(s => (
+                  <Text key={s} style={{ fontSize: 20, color: s <= Math.round(reviewStats!.average) ? '#f59e0b' : C.border }}>★</Text>
+                ))}
+              </View>
+              <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>{reviewStats.total} review{reviewStats.total !== 1 ? 's' : ''}</Text>
+            </View>
+            <View style={{ flex: 1, gap: 6 }}>
+              {STAR_KEYS.map(({ label, count }) => (
+                <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={{ fontSize: 11, color: C.textMuted, width: 44 }}>{label}</Text>
+                  <View style={{ flex: 1, height: 8, backgroundColor: C.surfaceAlt, borderRadius: 4, overflow: 'hidden' }}>
+                    <View style={{ height: 8, borderRadius: 4, backgroundColor: '#f59e0b',
+                      width: `${Math.round((count / maxBar) * 100)}%` as any }} />
+                  </View>
+                  <Text style={{ fontSize: 11, color: C.textMuted, width: 20, textAlign: 'right' }}>{count}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {/* Review list */}
+        <Text style={[styles.sectionTitle, { color: C.text }]}>All Reviews</Text>
+        <View style={{ gap: 10 }}>
+          {reviews.map(r => (
+            <View key={r.id} style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: C.text }}>{r.customerName}</Text>
+                <View style={{ flexDirection: 'row', gap: 2 }}>
+                  {[1,2,3,4,5].map(s => (
+                    <Text key={s} style={{ fontSize: 14, color: s <= r.rating ? '#f59e0b' : C.border }}>★</Text>
+                  ))}
+                </View>
+              </View>
+              {!!r.comment && <Text style={{ fontSize: 13, color: C.textSub, lineHeight: 18 }}>{r.comment}</Text>}
+              <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+                {new Date(r.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </Text>
+            </View>
+          ))}
+        </View>
       </ScrollView>
     );
   }
@@ -2094,6 +2177,7 @@ export default function BusinessDashboard() {
               {activeTab === 'staff'        && 'Staff Members'}
               {activeTab === 'appointments' && 'Appointments'}
               {activeTab === 'customers'    && 'Analytics'}
+              {activeTab === 'reviews'      && 'Reviews'}
               {activeTab === 'subscription' && 'Subscription'}
               {activeTab === 'settings'     && 'Settings'}
             </Text>
@@ -2114,6 +2198,7 @@ export default function BusinessDashboard() {
           {activeTab === 'staff'        && renderStaff()}
           {activeTab === 'appointments' && renderAppointments()}
           {activeTab === 'customers'    && renderCustomers()}
+          {activeTab === 'reviews'      && renderReviews()}
           {activeTab === 'subscription' && renderSubscription()}
           {activeTab === 'settings'     && renderSettings()}
         </View>
