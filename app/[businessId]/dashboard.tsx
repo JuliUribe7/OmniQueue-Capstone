@@ -147,6 +147,9 @@ export default function BusinessDashboard() {
   const [reviews, setReviews] = useState<import('../../services/api').ApiReview[]>([]);
   const [reviewStats, setReviewStats] = useState<import('../../services/api').ApiReviewStats | null>(null);
 
+  // Home tab — appointments dismissed client-side
+  const [hiddenApptIds, setHiddenApptIds] = useState<Set<string>>(new Set());
+
   // Google Calendar
   const [googleConnected, setGoogleConnected]   = useState(false);
   const [googleConnecting, setGoogleConnecting] = useState(false);
@@ -384,7 +387,7 @@ export default function BusinessDashboard() {
   }
 
   // ── Ticket card ────────────────────────────────────────────────────────────
-  function TicketCard({ item, index = 0, compact = false }: { item: ApiTicket; index?: number; compact?: boolean }) {
+  function TicketCard({ item, index = 0, compact = false, typeBadge }: { item: ApiTicket; index?: number; compact?: boolean; typeBadge?: string }) {
     const isCalled = item.status === 'Called';
     const joinedAt = (() => {
       const d = new Date(item.createdAt);
@@ -423,6 +426,11 @@ export default function BusinessDashboard() {
             </View>
             <Text style={[styles.customerPhone, { color: C.textMuted }]}>{item.phoneNumber}</Text>
           </View>
+          {typeBadge && (
+            <View style={{ backgroundColor: '#f0fdf4', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginRight: 4 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#059669' }}>{typeBadge}</Text>
+            </View>
+          )}
           <View style={[styles.statusPill, { backgroundColor: statusColor(item.status) + '22' }]}>
             <Text style={[styles.statusPillText, { color: statusColor(item.status) }]}>
               {isCalled ? 'Called' : 'Waiting'}
@@ -472,14 +480,61 @@ export default function BusinessDashboard() {
 
   // ── Home tab ───────────────────────────────────────────────────────────────
   function renderHome() {
-    const preview = liveTickets.slice(0, 3);
+    const todayKey  = new Date().toISOString().split('T')[0];
+    const now       = new Date();
+    const nowMins   = now.getHours() * 60 + now.getMinutes();
+
+    function toMins(t: string) {
+      const [h, m] = t.split(':').map(Number);
+      return h * 60 + m;
+    }
+    function fmtTime(t: string) {
+      const [h, m] = t.split(':').map(Number);
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+    }
+
+    // Today's appointments filtered by hidden
+    const todayAppts = appointments.filter(a => a.date === todayKey && !hiddenApptIds.has(a.id));
+
+    // Build unified sorted list
+    type UItem =
+      | { kind: 'ticket'; ticket: ApiTicket; priority: number }
+      | { kind: 'appt';   appt: import('../../services/api').ApiAppointment; priority: number };
+
+    const items: UItem[] = [
+      ...liveTickets.map(ticket => ({
+        kind: 'ticket' as const,
+        ticket,
+        priority: ticket.status === 'Called' ? 0 : 3 + ticket.position / 100,
+      })),
+      ...todayAppts.map(appt => {
+        const diff = toMins(appt.time) - nowMins;
+        const priority = diff < 0 ? 1 : diff <= 30 ? 2 : 10 + diff / 1000;
+        return { kind: 'appt' as const, appt, priority };
+      }),
+    ].sort((a, b) => a.priority - b.priority);
+
+    // Check in appointment → converts to walk-in
+    async function handleCheckIn(appt: import('../../services/api').ApiAppointment) {
+      if (!appt.serviceId) return;
+      try {
+        await api.addWalkin(appt.customerName, appt.phoneNumber, appt.serviceId, appt.staffId ?? undefined);
+        setHiddenApptIds(prev => new Set([...prev, appt.id]));
+        const { tickets: tix } = await api.getQueue();
+        setTickets(tix);
+      } catch {}
+    }
+
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+        {/* Stats strip */}
         <View style={styles.statsRow}>
           {[
-            { val: waitingTickets.length, label: 'Waiting',  accent: '#f59e0b', numColor: C.text },
-            { val: calledTickets.length,  label: 'Called',   accent: '#10b981', numColor: '#10b981' },
-            { val: `${avgWait}m`,         label: 'Avg Wait', accent: '#8b5cf6', numColor: '#8b5cf6' },
+            { val: waitingTickets.length, label: 'Waiting',      accent: '#f59e0b', numColor: C.text },
+            { val: calledTickets.length,  label: 'Being Served', accent: '#10b981', numColor: '#10b981' },
+            { val: todayAppts.length,     label: 'Appointments', accent: '#2563eb', numColor: '#2563eb' },
           ].map(({ val, label, accent, numColor }) => (
             <View key={label} style={[styles.statCard, { backgroundColor: C.surface, borderTopColor: accent }]}>
               <Text style={[styles.statNum, { color: numColor }]}>{val}</Text>
@@ -488,152 +543,145 @@ export default function BusinessDashboard() {
           ))}
         </View>
 
+        {/* Unified list */}
         <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: C.text }]}>Live Queue</Text>
-          <TouchableOpacity onPress={() => setActiveTab('queue')}>
-            <Text style={styles.sectionLink}>View All →</Text>
-          </TouchableOpacity>
+          <Text style={[styles.sectionTitle, { color: C.text }]}>Today's Queue & Appointments</Text>
+          {items.length > 0 && (
+            <View style={[styles.navBadge, { backgroundColor: C.primary }]}>
+              <Text style={styles.navBadgeText}>{items.length}</Text>
+            </View>
+          )}
         </View>
 
-        {liveTickets.length === 0 ? (
+        {items.length === 0 ? (
           <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
-            <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No customers in queue</Text>
+            <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No customers today yet</Text>
           </View>
         ) : (
-          preview.map((ticket, i) => (
-            <TouchableOpacity key={ticket.id} onPress={() => setActiveTab('queue')} activeOpacity={0.8}>
-              <TicketCard item={ticket} index={i} compact />
-            </TouchableOpacity>
-          ))
+          items.map((item, listIndex) => {
+            if (item.kind === 'ticket') {
+              return <TicketCard key={item.ticket.id} item={item.ticket} index={listIndex} typeBadge="Walk-in" />;
+            }
+
+            // Appointment card
+            const appt     = item.appt;
+            const svc      = services.find(s => s.id === appt.serviceId);
+            const apptStf  = staff.find(s => s.id === appt.staffId);
+            const sColor   = apptStf ? staffColor(apptStf.id) : null;
+            const diff     = toMins(appt.time) - nowMins;
+            const isOver   = diff < 0;
+            const isSoon   = !isOver && diff <= 30;
+            const badgeTxt = isOver ? 'Overdue' : isSoon ? 'Due Soon' : 'Appointment';
+            const badgeClr = isOver ? '#ef4444' : isSoon ? '#f59e0b' : '#2563eb';
+
+            return (
+              <View key={appt.id} style={{ marginTop: sColor ? 16 : 0 }}>
+                {sColor && apptStf && (
+                  <View style={{ position: 'absolute', top: -16, left: 14, zIndex: 2,
+                    backgroundColor: sColor, paddingHorizontal: 10, paddingVertical: 4,
+                    borderTopLeftRadius: 6, borderTopRightRadius: 6 }}>
+                    <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{apptStf.name}</Text>
+                  </View>
+                )}
+                <View style={[styles.ticketCard, {
+                  backgroundColor: sColor ? sColor + '0d' : C.surface,
+                  borderColor: sColor ?? C.border,
+                  borderWidth: sColor ? 2 : 1,
+                  ...(sColor ? { borderTopLeftRadius: 0 } : {}),
+                }]}>
+                  {/* Top row */}
+                  <View style={styles.ticketTop}>
+                    <View style={[styles.positionBadge, { backgroundColor: badgeClr }]}>
+                      <Text style={[styles.positionText, { fontSize: 9 }]}>{fmtTime(appt.time)}</Text>
+                    </View>
+                    <View style={styles.customerInfo}>
+                      <Text style={[styles.customerName, { color: C.text }]}>{appt.customerName}</Text>
+                      <Text style={[styles.customerPhone, { color: C.textMuted }]}>{appt.phoneNumber}</Text>
+                    </View>
+                    <View style={[styles.statusPill, { backgroundColor: badgeClr + '22' }]}>
+                      <Text style={[styles.statusPillText, { color: badgeClr }]}>{badgeTxt}</Text>
+                    </View>
+                  </View>
+                  {/* Meta */}
+                  <View style={styles.ticketMeta}>
+                    <Text style={[styles.metaText, { color: C.textSub }]}>✂ {svc?.name ?? 'Service'}</Text>
+                    {apptStf && (
+                      <>
+                        <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+                        <Text style={[styles.metaText, { color: C.textSub }]}>{apptStf.name}</Text>
+                      </>
+                    )}
+                    <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+                    <Text style={[styles.metaText, { color: C.textSub }]}>Appointment</Text>
+                  </View>
+                  {/* Actions */}
+                  <View style={styles.ticketActions}>
+                    {appt.serviceId && (
+                      <TouchableOpacity style={styles.serveBtn} onPress={() => handleCheckIn(appt)} activeOpacity={0.8}>
+                        <Text style={styles.serveBtnText}>▶ Check In</Text>
+                      </TouchableOpacity>
+                    )}
+                    {appt.phoneNumber && (
+                      <TouchableOpacity
+                        style={[styles.removeBtn, { borderColor: '#2563eb22', backgroundColor: '#eff6ff' }]}
+                        onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
+                        <Text style={[styles.removeBtnText, { color: '#2563eb' }]}>✉ Message</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.removeBtn, { borderColor: C.border }]}
+                      onPress={() => setHiddenApptIds(prev => new Set([...prev, appt.id]))}>
+                      <Text style={[styles.removeBtnText, { color: C.textSub }]}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            );
+          })
         )}
 
-        {/* Today's Appointments preview */}
-        {(() => {
-          const todayKey = new Date().toISOString().split('T')[0];
-          const todayAppts = appointments
-            .filter(a => a.date === todayKey)
-            .sort((a, b) => a.time.localeCompare(b.time))
-            .slice(0, 3);
-
-          function fmtTime(t: string) {
-            const [h, m] = t.split(':').map(Number);
-            const ampm = h >= 12 ? 'PM' : 'AM';
-            const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-            return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
-          }
-
-          // Group today's appointments by staff
-          const staffGroups = staff
-            .map(s => ({ member: s, appts: todayAppts.filter(a => a.staffId === s.id) }))
-            .filter(g => g.appts.length > 0);
-          const anyAppts = todayAppts.filter(a => !staff.find(s => s.id === a.staffId));
-
-          return (
-            <>
-              <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: C.text }]}>Today's Appointments</Text>
-                <TouchableOpacity onPress={() => setActiveTab('appointments')}>
-                  <Text style={styles.sectionLink}>View All →</Text>
-                </TouchableOpacity>
+        {/* Served Today */}
+        {servedToday.length > 0 && (
+          <>
+            <View style={[styles.sectionHeader, { marginTop: 20 }]}>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>Served Today</Text>
+              <View style={[styles.navBadge, { backgroundColor: '#10b981' }]}>
+                <Text style={styles.navBadgeText}>{servedToday.length}</Text>
               </View>
-
-              {todayAppts.length === 0 ? (
-                <View style={[styles.emptyPreview, { backgroundColor: C.surface }]}>
-                  <Text style={[styles.emptyPreviewText, { color: C.textMuted }]}>No appointments today</Text>
+            </View>
+            {servedToday.map(item => {
+              const isUnserved = item.status === 'Unserved';
+              const doneColor  = isUnserved ? '#ef4444' : '#10b981';
+              return (
+                <View key={item.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: isUnserved ? '#ef444430' : C.border, opacity: 0.85 }]}>
+                  <View style={styles.ticketTop}>
+                    <View style={[styles.positionBadge, { backgroundColor: doneColor }]}>
+                      <Text style={styles.positionText}>{isUnserved ? '✕' : '✓'}</Text>
+                    </View>
+                    <View style={styles.customerInfo}>
+                      <Text style={[styles.customerName, { color: C.text }]}>{item.customerName}</Text>
+                      <Text style={[styles.customerPhone, { color: C.textMuted }]}>{item.phoneNumber}</Text>
+                    </View>
+                    <View style={[styles.statusPill, { backgroundColor: doneColor + '22' }]}>
+                      <Text style={[styles.statusPillText, { color: doneColor }]}>{isUnserved ? 'Unserved' : 'Done'}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.ticketMeta}>
+                    <Text style={[styles.metaText, { color: C.textSub }]}>✂ {item.serviceName}</Text>
+                    {item.staffName && (
+                      <>
+                        <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+                        <Text style={[styles.metaText, { color: C.primary, fontWeight: '600' }]}>👤 {item.staffName}</Text>
+                      </>
+                    )}
+                    <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
+                    <Text style={[styles.metaText, { color: C.textSub }]}>{timeAgo(item.updatedAt)}</Text>
+                  </View>
                 </View>
-              ) : (
-                <>
-                  {staffGroups.map(({ member, appts }) => (
-                    <View key={member.id}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, marginTop: 4 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: C.primary + '22', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ fontSize: 12, fontWeight: '700', color: C.primary }}>{member.name.charAt(0)}</Text>
-                        </View>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>{member.name}</Text>
-                        <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
-                        <Text style={{ fontSize: 11, color: C.textMuted }}>{appts.length} appt{appts.length !== 1 ? 's' : ''}</Text>
-                      </View>
-                      {appts.map(appt => {
-                        const svc = services.find(s => s.id === appt.serviceId);
-                        return (
-                          <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', alignItems: 'stretch', borderLeftWidth: 3, borderLeftColor: C.primary }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <View style={styles.apptTimeCol}>
-                                <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
-                              </View>
-                              <View style={styles.apptInfo}>
-                                <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
-                                <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
-                              </View>
-                              <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
-                              </View>
-                            </View>
-                      {appt.phoneNumber ? (
-                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                          <TouchableOpacity
-                            style={{ flex: 1, backgroundColor: '#eff6ff', borderRadius: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderColor: '#2563eb22' }}
-                            onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>✉ Message</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            style={{ flex: 1, backgroundColor: C.surfaceAlt, borderRadius: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderColor: C.border }}
-                            onPress={() => setActiveTab('appointments')}>
-                            <Text style={{ fontSize: 12, fontWeight: '600', color: C.textSub }}>View All →</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ) : null}
-                    </View>
-                  );
-                })}
-                    </View>
-                  ))}
-
-                  {anyAppts.length > 0 && (
-                    <View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, marginTop: 4 }}>
-                        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ fontSize: 14 }}>👥</Text>
-                        </View>
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: C.text }}>Any Available</Text>
-                        <View style={{ flex: 1, height: 1, backgroundColor: C.border }} />
-                        <Text style={{ fontSize: 11, color: C.textMuted }}>{anyAppts.length} appt{anyAppts.length !== 1 ? 's' : ''}</Text>
-                      </View>
-                      {anyAppts.map(appt => {
-                        const svc = services.find(s => s.id === appt.serviceId);
-                        return (
-                          <View key={appt.id} style={[styles.apptCard, { backgroundColor: C.surface, borderColor: C.border, flexDirection: 'column', alignItems: 'stretch' }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <View style={styles.apptTimeCol}>
-                                <Text style={[styles.apptTime, { color: C.primary }]}>{fmtTime(appt.time)}</Text>
-                              </View>
-                              <View style={styles.apptInfo}>
-                                <Text style={[styles.apptName, { color: C.text }]}>{appt.customerName}</Text>
-                                <Text style={[styles.apptService, { color: C.textSub }]}>{svc?.name ?? 'Service'}</Text>
-                              </View>
-                              <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                                <Text style={{ fontSize: 11, fontWeight: '600', color: '#2563eb' }}>Booked</Text>
-                              </View>
-                            </View>
-                            {appt.phoneNumber ? (
-                              <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-                                <TouchableOpacity
-                                  style={{ flex: 1, backgroundColor: '#eff6ff', borderRadius: 8, paddingVertical: 7, alignItems: 'center', borderWidth: 1, borderColor: '#2563eb22' }}
-                                  onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
-                                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>✉ Message</Text>
-                                </TouchableOpacity>
-                              </View>
-                            ) : null}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-                </>
-              )}
-            </>
-          );
-        })()}
+              );
+            })}
+          </>
+        )}
 
       </ScrollView>
     );
