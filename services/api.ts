@@ -59,8 +59,16 @@ export interface ApiStaff {
   role: string;
   phone: string;
   photoUrl: string;
+  color?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApiBusinessHour {
+  dayOfWeek: number;
+  isOpen: boolean;
+  openTime: string;
+  closeTime: string;
 }
 
 export interface ApiReview {
@@ -138,10 +146,10 @@ export const api = {
   // Staff (auth required)
   getStaff: (): Promise<{ staff: ApiStaff[] }> =>
     apiFetch('/api/businesses/me/staff'),
-  addStaff: (name: string, role: string, phone: string, photoUrl: string): Promise<{ staff: ApiStaff }> =>
-    apiFetch('/api/businesses/me/staff', { method: 'POST', body: JSON.stringify({ name, role, phone, photoUrl }) }),
-  updateStaff: (staffId: string, name: string, role: string, phone: string, photoUrl: string): Promise<{ staff: ApiStaff }> =>
-    apiFetch(`/api/staff/${staffId}`, { method: 'PUT', body: JSON.stringify({ name, role, phone, photoUrl }) }),
+  addStaff: (name: string, role: string, phone: string, photoUrl: string, color?: string): Promise<{ staff: ApiStaff }> =>
+    apiFetch('/api/businesses/me/staff', { method: 'POST', body: JSON.stringify({ name, role, phone, photoUrl, color }) }),
+  updateStaff: (staffId: string, name: string, role: string, phone: string, photoUrl: string, color?: string): Promise<{ staff: ApiStaff }> =>
+    apiFetch(`/api/staff/${staffId}`, { method: 'PUT', body: JSON.stringify({ name, role, phone, photoUrl, color }) }),
   deleteStaff: (staffId: string) =>
     apiFetch(`/api/staff/${staffId}`, { method: 'DELETE' }),
 
@@ -186,6 +194,22 @@ export const api = {
   // Admin
   getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; plan: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
     apiFetch('/api/admin/businesses'),
+
+  // Business hours
+  getBusinessHours: (): Promise<{ hours: ApiBusinessHour[] }> =>
+    apiFetch('/api/businesses/me/hours'),
+  updateBusinessHours: (hours: ApiBusinessHour[]): Promise<{ hours: ApiBusinessHour[] }> =>
+    apiFetch('/api/businesses/me/hours', { method: 'PUT', body: JSON.stringify({ hours }) }),
+  getPublicBusinessHours: (businessId: string): Promise<{ hours: ApiBusinessHour[] }> =>
+    apiFetch(`/api/businesses/${businessId}/hours`),
+
+  // Analytics date range
+  getTicketAnalytics: (start: string, end: string): Promise<{ tickets: ApiTicket[] }> =>
+    apiFetch(`/api/businesses/me/analytics/tickets?start=${start}&end=${end}`),
+
+  // Funnel events
+  logFunnelEvent: (businessId: string, type: string): Promise<void> =>
+    apiFetch(`/api/businesses/${businessId}/funnel-event`, { method: 'POST', body: JSON.stringify({ type }) }).catch(() => {}),
 
   // Reviews (public — customer-facing)
   submitReview: (businessId: string, ticketId: string, customerName: string, rating: number, comment?: string): Promise<{ review: ApiReview }> =>

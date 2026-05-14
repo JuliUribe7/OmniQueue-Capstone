@@ -118,11 +118,7 @@ export default function BusinessDashboard() {
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=ffffff&data=${encodeURIComponent(portalUrl)}`;
 
   // Settings tab state
-  const [settingsHours, setSettingsHours] = useState({
-    mon: '9:00 AM – 6:00 PM', tue: '9:00 AM – 6:00 PM', wed: '9:00 AM – 6:00 PM',
-    thu: '9:00 AM – 6:00 PM', fri: '9:00 AM – 6:00 PM',
-    sat: '10:00 AM – 4:00 PM', sun: 'Closed',
-  });
+  const [businessHours, setBusinessHours] = useState<import('../../services/api').ApiBusinessHour[]>([]);
   const [hoursSaved, setHoursSaved] = useState(false);
   const [notificationChannel, setNotificationChannel] = useState<'sms' | 'email' | 'both'>('sms');
   const [allowStaffSelection, setAllowStaffSelection] = useState(true);
@@ -136,12 +132,18 @@ export default function BusinessDashboard() {
   const [newStaffRole, setNewStaffRole]   = useState('');
   const [newStaffPhone, setNewStaffPhone] = useState('');
   const [newStaffPhoto, setNewStaffPhoto] = useState('');
+  const [newStaffColor, setNewStaffColor] = useState('#2563eb');
   const [staffSaving, setStaffSaving]     = useState(false);
 
   // Appointments
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
-  const [calView, setCalView] = useState<'today' | 'week' | 'month'>('today');
+  const [calView, setCalView] = useState<'today' | 'future' | 'calendar'>('today');
   const [apptStaffFilter, setApptStaffFilter] = useState<string>('all');
+
+  // Analytics date range
+  const [analyticsRange, setAnalyticsRange] = useState<'7d' | '30d' | '90d'>('30d');
+  const [analyticsTickets, setAnalyticsTickets] = useState<import('../../services/api').ApiTicket[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // Reviews
   const [reviews, setReviews] = useState<import('../../services/api').ApiReview[]>([]);
@@ -182,6 +184,7 @@ export default function BusinessDashboard() {
       // Just check current status
       api.getGoogleStatus().then(r => setGoogleConnected(r.connected)).catch(() => {});
       api.getMyReviews().then(r => { setReviews(r.reviews); setReviewStats(r.stats); }).catch(() => {});
+      api.getBusinessHours().then(r => setBusinessHours(r.hours)).catch(() => {});
       const clean = window.location.pathname;
       if (isSuccess) window.history.replaceState({}, '', clean);
       return;
@@ -246,6 +249,19 @@ export default function BusinessDashboard() {
     }, 5000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    setAnalyticsLoading(true);
+    const end = new Date();
+    const start = new Date();
+    const days = analyticsRange === '7d' ? 7 : analyticsRange === '30d' ? 30 : 90;
+    start.setDate(start.getDate() - days);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    api.getTicketAnalytics(fmt(start), fmt(end))
+      .then(r => setAnalyticsTickets(r.tickets))
+      .catch(() => setAnalyticsTickets([]))
+      .finally(() => setAnalyticsLoading(false));
+  }, [analyticsRange]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function shareViaSMS() {
@@ -358,6 +374,8 @@ export default function BusinessDashboard() {
   const STAFF_COLORS = ['#2563eb', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#06b6d4', '#ec4899'];
   function staffColor(staffId: string | undefined): string | null {
     if (!staffId) return null;
+    const member = staff.find(s => s.id === staffId);
+    if (member?.color) return member.color;
     const idx = staff.findIndex(s => s.id === staffId);
     return STAFF_COLORS[idx >= 0 ? idx % STAFF_COLORS.length : 0];
   }
@@ -617,8 +635,8 @@ export default function BusinessDashboard() {
                   {/* Actions */}
                   <View style={styles.ticketActions}>
                     {appt.serviceId && (
-                      <TouchableOpacity style={styles.serveBtn} onPress={() => handleCheckIn(appt)} activeOpacity={0.8}>
-                        <Text style={styles.serveBtnText}>▶ Check In</Text>
+                      <TouchableOpacity style={styles.callBtn} onPress={() => handleCheckIn(appt)} activeOpacity={0.8}>
+                        <Text style={styles.callBtnText}>▶ Check In</Text>
                       </TouchableOpacity>
                     )}
                     {appt.phoneNumber && (
@@ -640,11 +658,11 @@ export default function BusinessDashboard() {
           })
         )}
 
-        {/* Served Today */}
+        {/* Already Served */}
         {servedToday.length > 0 && (
           <>
             <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-              <Text style={[styles.sectionTitle, { color: C.text }]}>Served Today</Text>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>Already Served</Text>
               <View style={[styles.navBadge, { backgroundColor: '#10b981' }]}>
                 <Text style={styles.navBadgeText}>{servedToday.length}</Text>
               </View>
@@ -715,7 +733,7 @@ export default function BusinessDashboard() {
         {servedToday.length > 0 && (
           <>
             <View style={[styles.sectionHeader, { marginTop: 20 }]}>
-              <Text style={[styles.sectionTitle, { color: C.text }]}>Served Today</Text>
+              <Text style={[styles.sectionTitle, { color: C.text }]}>Already Served</Text>
               <View style={[styles.navBadge, { backgroundColor: '#10b981' }]}>
                 <Text style={styles.navBadgeText}>{servedToday.length}</Text>
               </View>
@@ -723,6 +741,11 @@ export default function BusinessDashboard() {
             {servedToday.map(item => {
               const isUnserved = item.status === 'Unserved';
               const doneColor  = isUnserved ? '#ef4444' : '#10b981';
+              const servedAt   = (() => {
+                const d = new Date(item.updatedAt);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' +
+                  d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+              })();
               return (
               <View key={item.id} style={[styles.ticketCard, { backgroundColor: C.surface, borderColor: isUnserved ? '#ef444430' : C.border, opacity: 0.85 }]}>
                 <View style={styles.ticketTop}>
@@ -746,7 +769,9 @@ export default function BusinessDashboard() {
                     </>
                   )}
                   <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-                  <Text style={[styles.metaText, { color: C.textSub }]}>{timeAgo(item.updatedAt)}</Text>
+                  <Text style={[styles.metaText, { color: doneColor, fontWeight: '600' }]}>
+                    {isUnserved ? 'Unserved' : `Served ${servedAt}`}
+                  </Text>
                 </View>
               </View>
               );
@@ -910,23 +935,25 @@ export default function BusinessDashboard() {
 
   // ── Analytics tab ─────────────────────────────────────────────────────────
   function renderCustomers() {
-    const todayKey = new Date().toISOString().split('T')[0];
+    // Use date-range tickets if loaded, fall back to all-time tickets
+    const t = analyticsTickets.length > 0 ? analyticsTickets : tickets;
+    const rangeLabel = analyticsRange === '7d' ? 'Last 7 Days' : analyticsRange === '30d' ? 'Last 30 Days' : 'Last 90 Days';
 
     // KPI computations
-    const doneCount     = tickets.filter(t => t.status === 'Done').length;
-    const unservedCount = tickets.filter(t => t.status === 'Unserved').length;
+    const doneCount     = t.filter(x => x.status === 'Done').length;
+    const unservedCount = t.filter(x => x.status === 'Unserved').length;
     const noShowRate    = doneCount + unservedCount > 0
       ? Math.round((unservedCount / (doneCount + unservedCount)) * 100) : 0;
 
     // How customers arrive
     const apptPhones  = new Set(appointments.map(a => a.phoneNumber));
     const scheduledCnt = appointments.length;
-    const walkinCnt    = tickets.filter(t => !apptPhones.has(t.phoneNumber)).length;
+    const walkinCnt    = t.filter(x => !apptPhones.has(x.phoneNumber)).length;
     const totalInflow  = scheduledCnt + walkinCnt || 1;
 
     // Service breakdown
     const svcCounts: Record<string, number> = {};
-    tickets.forEach(t => { svcCounts[t.serviceName] = (svcCounts[t.serviceName] ?? 0) + 1; });
+    t.forEach(x => { svcCounts[x.serviceName] = (svcCounts[x.serviceName] ?? 0) + 1; });
     const svcEntries  = Object.entries(svcCounts).sort((a, b) => b[1] - a[1]);
     const maxSvcCount = Math.max(1, ...Object.values(svcCounts));
 
@@ -934,8 +961,8 @@ export default function BusinessDashboard() {
     const DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const HOURS = Array.from({ length: 11 }, (_, i) => i + 8); // 8am–6pm
     const heatmap: Record<string, number> = {};
-    tickets.forEach(t => {
-      const d = new Date(t.createdAt);
+    t.forEach(tk => {
+      const d = new Date(tk.createdAt);
       const dow = d.getDay();
       const h   = d.getHours();
       if (h >= 8 && h <= 18) {
@@ -953,11 +980,11 @@ export default function BusinessDashboard() {
     const now = Date.now();
     const phoneVisits: Record<string, number> = {};
     const phoneLastSeen: Record<string, number> = {};
-    tickets.forEach(t => {
-      if (!t.phoneNumber) return;
-      const ts = new Date(t.createdAt).getTime();
-      phoneVisits[t.phoneNumber] = (phoneVisits[t.phoneNumber] ?? 0) + 1;
-      phoneLastSeen[t.phoneNumber] = Math.max(phoneLastSeen[t.phoneNumber] ?? 0, ts);
+    t.forEach(tk => {
+      if (!tk.phoneNumber) return;
+      const ts = new Date(tk.createdAt).getTime();
+      phoneVisits[tk.phoneNumber] = (phoneVisits[tk.phoneNumber] ?? 0) + 1;
+      phoneLastSeen[tk.phoneNumber] = Math.max(phoneLastSeen[tk.phoneNumber] ?? 0, ts);
     });
     let loyal = 0, returning = 0, newCust = 0, atRisk = 0, lapsed = 0;
     Object.entries(phoneLastSeen).forEach(([phone, lastTs]) => {
@@ -974,8 +1001,23 @@ export default function BusinessDashboard() {
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
 
+        {/* Date range selector */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+          {(['7d', '30d', '90d'] as const).map(r => (
+            <TouchableOpacity key={r} onPress={() => setAnalyticsRange(r)} activeOpacity={0.7}
+              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+                backgroundColor: analyticsRange === r ? C.primary : C.surface,
+                borderWidth: 1, borderColor: analyticsRange === r ? C.primary : C.border }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: analyticsRange === r ? '#fff' : C.textSub }}>
+                {r === '7d' ? '7 Days' : r === '30d' ? '30 Days' : '90 Days'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {analyticsLoading && <ActivityIndicator size="small" color={C.primary} style={{ marginLeft: 4 }} />}
+        </View>
+
         {/* KPI Strip */}
-        <Text style={[styles.sectionTitle, { color: C.text }]}>Overview</Text>
+        <Text style={[styles.sectionTitle, { color: C.text }]}>Overview — {rangeLabel}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {[
             { val: doneCount + unservedCount,                                            label: 'Total Served',  accent: '#2563eb' },
@@ -1118,7 +1160,7 @@ export default function BusinessDashboard() {
 
     function openAddModal() {
       setEditingStaffId(null);
-      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto(''); setNewStaffColor('#2563eb');
       setShowStaffModal(true);
     }
 
@@ -1128,13 +1170,14 @@ export default function BusinessDashboard() {
       setNewStaffRole(member.role ?? '');
       setNewStaffPhone(member.phone ?? '');
       setNewStaffPhoto(member.photoUrl ?? '');
+      setNewStaffColor(member.color ?? '#2563eb');
       setShowStaffModal(true);
     }
 
     function closeModal() {
       setShowStaffModal(false);
       setEditingStaffId(null);
-      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto(''); setNewStaffColor('#2563eb');
     }
 
     function pickPhoto(useCamera: boolean) {
@@ -1176,13 +1219,13 @@ export default function BusinessDashboard() {
           const { staff: updated } = await api.updateStaff(
             editingStaffId,
             newStaffName.trim(), newStaffRole.trim() || 'Staff',
-            newStaffPhone.trim(), newStaffPhoto.trim(),
+            newStaffPhone.trim(), newStaffPhoto.trim(), newStaffColor,
           );
           setStaff(prev => prev.map(s => s.id === editingStaffId ? updated : s));
         } else {
           const { staff: member } = await api.addStaff(
             newStaffName.trim(), newStaffRole.trim() || 'Staff',
-            newStaffPhone.trim(), newStaffPhoto.trim(),
+            newStaffPhone.trim(), newStaffPhoto.trim(), newStaffColor,
           );
           setStaff(prev => [...prev, member]);
         }
@@ -1361,6 +1404,19 @@ export default function BusinessDashboard() {
                     placeholder="(555) 000-0000" placeholderTextColor={C.placeholder}
                     keyboardType="phone-pad"
                   />
+                </View>
+
+                {/* Staff color */}
+                <View style={{ marginTop: 12, gap: 6 }}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>Staff Color</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {['#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4','#ec4899','#f97316','#84cc16','#6366f1'].map(c => (
+                      <TouchableOpacity key={c} onPress={() => setNewStaffColor(c)} activeOpacity={0.7}
+                        style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: c,
+                          borderWidth: newStaffColor === c ? 3 : 0, borderColor: '#fff',
+                          shadowColor: '#000', shadowOpacity: newStaffColor === c ? 0.3 : 0, shadowRadius: 4, elevation: newStaffColor === c ? 4 : 0 }} />
+                    ))}
+                  </View>
                 </View>
 
                 {/* Action buttons */}
@@ -1673,11 +1729,10 @@ export default function BusinessDashboard() {
           ? allDayAppts.filter(a => !staff.find(s => s.id === a.staffId))
           : allDayAppts.filter(a => a.staffId === apptStaffFilter);
 
-      // Group filtered appts by staff for display when showing all
       function renderApptCard(appt: typeof appointments[0], i: number) {
         const svc    = services.find(s => s.id === appt.serviceId);
         const member = staff.find(s => s.id === appt.staffId);
-        const color  = COLORS[i % COLORS.length];
+        const color  = staffColor(appt.staffId) ?? COLORS[i % COLORS.length];
         return (
           <View key={appt.id} style={{ backgroundColor: C.surface, borderRadius: 12, padding: 14,
             borderLeftWidth: 4, borderLeftColor: color,
@@ -1695,14 +1750,33 @@ export default function BusinessDashboard() {
               {appt.phoneNumber ? <Text style={{ fontSize: 12, color: C.textMuted }}>📞 {appt.phoneNumber}</Text> : null}
               {member ? <Text style={{ fontSize: 12, color: C.textMuted }}>👤 {member.name}</Text> : null}
             </View>
-            {appt.phoneNumber ? (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+              {appt.serviceId && (
+                <TouchableOpacity style={[styles.callBtn, { flex: 1 }]}
+                  onPress={async () => {
+                    try {
+                      await api.addWalkin(appt.customerName, appt.phoneNumber, appt.serviceId!, appt.staffId ?? undefined);
+                      const { tickets: tix } = await api.getQueue();
+                      setTickets(tix);
+                    } catch {}
+                  }}>
+                  <Text style={styles.callBtnText}>▶ Check In</Text>
+                </TouchableOpacity>
+              )}
+              {appt.phoneNumber && (
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: color + '18', borderRadius: BorderRadius.md, paddingVertical: 9,
+                    alignItems: 'center', borderWidth: 1, borderColor: color + '40' }}
+                  onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color }}>✉ Message</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
-                style={{ marginTop: 8, backgroundColor: color + '18', borderRadius: 8, paddingVertical: 7,
-                  alignItems: 'center', borderWidth: 1, borderColor: color + '40' }}
-                onPress={() => setMessageModal({ visible: true, name: appt.customerName, phone: appt.phoneNumber })}>
-                <Text style={{ fontSize: 12, fontWeight: '600', color }}>✉ Message Customer</Text>
+                style={[styles.removeBtn, { borderColor: C.border }]}
+                onPress={() => setHiddenApptIds(prev => new Set([...prev, appt.id]))}>
+                <Text style={[styles.removeBtnText, { color: C.textSub }]}>Remove</Text>
               </TouchableOpacity>
-            ) : null}
+            </View>
           </View>
         );
       }
@@ -1855,8 +1929,46 @@ export default function BusinessDashboard() {
       );
     }
 
-    // ── This Month — full calendar grid anchored to current month ──
-    function MonthView() {
+    // ── Future Appointments — upcoming list grouped by date ──
+    function FutureView() {
+      const futureAppts = appointments
+        .filter(a => a.date > todayKey)
+        .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+      if (futureAppts.length === 0) {
+        return (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 36, marginBottom: 10 }}>📅</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: C.text }}>No upcoming appointments</Text>
+          </View>
+        );
+      }
+
+      // Group by date
+      const grouped: Record<string, typeof appointments> = {};
+      futureAppts.forEach(a => {
+        if (!grouped[a.date]) grouped[a.date] = [];
+        grouped[a.date].push(a);
+      });
+
+      return (
+        <ScrollView contentContainerStyle={{ padding: 14, gap: 20 }} showsVerticalScrollIndicator={false}>
+          {Object.entries(grouped).map(([date, appts]) => (
+            <View key={date}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: C.textMuted, marginBottom: 8 }}>
+                {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </Text>
+              <View style={{ gap: 10 }}>
+                {appts.map((appt, i) => renderApptCard(appt, i))}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
+      );
+    }
+
+    // ── Business Calendar — full month grid ──
+    function CalendarView() {
       const year        = now.getFullYear();
       const month       = now.getMonth();
       const firstDay    = new Date(year, month, 1).getDay();
@@ -1871,44 +1983,47 @@ export default function BusinessDashboard() {
       const DLABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return (
         <ScrollView contentContainerStyle={{ padding: 8 }} showsVerticalScrollIndicator={false}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 8 }}>
+          <Text style={{ fontSize: 15, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 10 }}>
             {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
           </Text>
-          <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+          <View style={{ flexDirection: 'row', marginBottom: 6 }}>
             {DLABELS.map(d => (
-              <View key={d} style={{ flex: 1, alignItems: 'center', paddingVertical: 4 }}>
-                <Text style={{ fontSize: 10, fontWeight: '700', color: C.textMuted }}>{d}</Text>
+              <View key={d} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: C.textMuted }}>{d}</Text>
               </View>
             ))}
           </View>
           {Array.from({ length: calCells.length / 7 }, (_, row) => (
             <View key={row} style={{ flexDirection: 'row' }}>
               {calCells.slice(row * 7, row * 7 + 7).map((day, col) => {
-                if (!day) return <View key={col} style={{ flex: 1, minHeight: 72, borderWidth: 0.5, borderColor: C.border, backgroundColor: C.surfaceAlt, opacity: 0.3 }} />;
+                if (!day) return <View key={col} style={{ flex: 1, minHeight: 100, borderWidth: 0.5, borderColor: C.border, backgroundColor: C.surfaceAlt, opacity: 0.3 }} />;
                 const key      = mDayKey(day);
                 const isToday  = key === todayKey;
                 const dayAppts = byDate[key] ?? [];
                 return (
-                  <View key={col} style={{ flex: 1, minHeight: 72, borderWidth: 0.5, borderColor: C.border,
-                    padding: 3, backgroundColor: isToday ? C.primary + '12' : C.surface }}>
-                    <View style={{ width: 20, height: 20, borderRadius: 10,
+                  <View key={col} style={{ flex: 1, minHeight: 100, borderWidth: 0.5, borderColor: C.border,
+                    padding: 4, backgroundColor: isToday ? C.primary + '12' : C.surface }}>
+                    <View style={{ width: 22, height: 22, borderRadius: 11,
                       backgroundColor: isToday ? C.primary : 'transparent',
-                      alignItems: 'center', justifyContent: 'center', marginBottom: 2 }}>
-                      <Text style={{ fontSize: 11, fontWeight: isToday ? '700' : '400', color: isToday ? '#fff' : C.text }}>{day}</Text>
+                      alignItems: 'center', justifyContent: 'center', marginBottom: 3 }}>
+                      <Text style={{ fontSize: 12, fontWeight: isToday ? '700' : '400', color: isToday ? '#fff' : C.text }}>{day}</Text>
                     </View>
-                    {dayAppts.slice(0, 2).map((a, i) => {
-                      const color = COLORS[i % COLORS.length];
+                    {dayAppts.slice(0, 3).map(a => {
+                      const color = staffColor(a.staffId) ?? COLORS[0];
                       const svc   = services.find(s => s.id === a.serviceId);
                       return (
                         <View key={a.id} style={{ backgroundColor: color + '22', borderLeftWidth: 2,
-                          borderLeftColor: color, borderRadius: 2, paddingHorizontal: 2, paddingVertical: 1, marginBottom: 1 }}>
-                          <Text numberOfLines={1} style={{ fontSize: 7, color, fontWeight: '600' }}>
-                            {fmtTime(a.time)} {svc?.name ?? ''}
+                          borderLeftColor: color, borderRadius: 2, paddingHorizontal: 3, paddingVertical: 2, marginBottom: 2 }}>
+                          <Text numberOfLines={1} style={{ fontSize: 8, color, fontWeight: '700' }}>
+                            {fmtTime(a.time)}
+                          </Text>
+                          <Text numberOfLines={1} style={{ fontSize: 7, color: C.text }}>
+                            {svc?.name ?? a.customerName}
                           </Text>
                         </View>
                       );
                     })}
-                    {dayAppts.length > 2 && <Text style={{ fontSize: 7, color: C.textMuted }}>+{dayAppts.length - 2}</Text>}
+                    {dayAppts.length > 3 && <Text style={{ fontSize: 8, color: C.textMuted }}>+{dayAppts.length - 3}</Text>}
                   </View>
                 );
               })}
@@ -1921,22 +2036,26 @@ export default function BusinessDashboard() {
     return (
       <View style={{ flex: 1, backgroundColor: C.bg }}>
 
-        {/* Tab switcher — Today / This Week / This Month */}
+        {/* Tab switcher */}
         <View style={{ flexDirection: 'row', backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.border }}>
-          {([['today', 'Today'], ['week', 'This Week'], ['month', 'This Month']] as const).map(([v, label]) => (
+          {([
+            ['today',    'Today\'s Appointments'],
+            ['future',   'Future Appointments'],
+            ['calendar', 'Business Calendar'],
+          ] as const).map(([v, label]) => (
             <TouchableOpacity key={v} onPress={() => setCalView(v)}
               style={{ flex: 1, paddingVertical: 13, alignItems: 'center',
                 borderBottomWidth: 2, borderBottomColor: calView === v ? C.primary : 'transparent' }}>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: calView === v ? C.primary : C.textMuted }}>{label}</Text>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: calView === v ? C.primary : C.textMuted }}>{label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* Views */}
         <View style={{ flex: 1 }}>
-          {calView === 'today' && <TodayView />}
-          {calView === 'week'  && <WeekView />}
-          {calView === 'month' && <MonthView />}
+          {calView === 'today'    && <TodayView />}
+          {calView === 'future'   && <FutureView />}
+          {calView === 'calendar' && <CalendarView />}
         </View>
 
         {/* Google Calendar status — bottom */}
@@ -2000,24 +2119,56 @@ export default function BusinessDashboard() {
             </View>
           )}
 
-          <View style={{ marginTop: 12, gap: 10 }}>
-            {days.map(({ key, label }) => (
-              <View key={key} style={styles.hoursRow}>
-                <Text style={[styles.hoursDay, { color: C.textSub }]}>{label}</Text>
-                <TextInput
-                  style={[styles.hoursInput, { backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
-                  value={settingsHours[key as keyof typeof settingsHours]}
-                  onChangeText={v => setSettingsHours(h => ({ ...h, [key]: v }))}
-                  placeholder="e.g. 9:00 AM – 6:00 PM"
-                  placeholderTextColor={C.placeholder}
-                />
-              </View>
-            ))}
+          <View style={{ marginTop: 12, gap: 8 }}>
+            {[0,1,2,3,4,5,6].map(dow => {
+              const DAY_LABELS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+              const h = businessHours.find(x => x.dayOfWeek === dow) ?? { dayOfWeek: dow, isOpen: dow >= 1 && dow <= 5, openTime: '09:00', closeTime: '17:00' };
+              const update = (patch: Partial<typeof h>) => {
+                setBusinessHours(prev => {
+                  const exists = prev.find(x => x.dayOfWeek === dow);
+                  if (exists) return prev.map(x => x.dayOfWeek === dow ? { ...x, ...patch } : x);
+                  return [...prev, { ...h, ...patch }];
+                });
+              };
+              return (
+                <View key={dow} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: dow === 0 ? 0 : 1, borderTopColor: C.border }}>
+                  <Text style={{ width: 90, fontSize: 13, fontWeight: '600', color: C.textSub }}>{DAY_LABELS[dow]}</Text>
+                  <TouchableOpacity
+                    onPress={() => update({ isOpen: !h.isOpen })}
+                    style={{ width: 40, height: 22, borderRadius: 11, backgroundColor: h.isOpen ? C.primary : C.border, padding: 2, justifyContent: 'center' }}>
+                    <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff', transform: [{ translateX: h.isOpen ? 18 : 0 }] }} />
+                  </TouchableOpacity>
+                  {h.isOpen ? (
+                    <View style={{ flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <TextInput
+                        style={[styles.hoursInput, { flex: 1, backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
+                        value={h.openTime} onChangeText={v => update({ openTime: v })}
+                        placeholder="09:00" placeholderTextColor={C.placeholder}
+                      />
+                      <Text style={{ color: C.textMuted }}>–</Text>
+                      <TextInput
+                        style={[styles.hoursInput, { flex: 1, backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
+                        value={h.closeTime} onChangeText={v => update({ closeTime: v })}
+                        placeholder="17:00" placeholderTextColor={C.placeholder}
+                      />
+                    </View>
+                  ) : (
+                    <Text style={{ fontSize: 13, color: C.textMuted, flex: 1 }}>Closed</Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
 
           <TouchableOpacity
             style={[styles.saveServicesBtn, { marginTop: 16 }]}
-            onPress={() => { setHoursSaved(true); setTimeout(() => setHoursSaved(false), 2500); }}
+            onPress={async () => {
+              try {
+                await api.updateBusinessHours(businessHours);
+                setHoursSaved(true);
+                setTimeout(() => setHoursSaved(false), 2500);
+              } catch {}
+            }}
           >
             <Text style={styles.addBtnText}>Save Hours</Text>
           </TouchableOpacity>
@@ -2202,6 +2353,23 @@ export default function BusinessDashboard() {
             })}
           </View>
 
+          {/* QR code in left sidebar */}
+          <View style={{ alignItems: 'center', paddingHorizontal: 8, paddingVertical: 10,
+            borderTopWidth: 1, borderTopColor: C.sidebarBorder }}>
+            <Text style={{ fontSize: 9, fontWeight: '700', color: C.textMuted, marginBottom: 6, letterSpacing: 0.5 }}>
+              CUSTOMER PORTAL
+            </Text>
+            <Image source={{ uri: qrSrc }} style={{ width: 88, height: 88 }} resizeMode="contain" />
+            <TouchableOpacity
+              style={{ marginTop: 8, backgroundColor: C.primary, borderRadius: 8,
+                paddingHorizontal: 10, paddingVertical: 6, width: '100%', alignItems: 'center' }}
+              onPress={() => setQrOpen(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>Share QR Code</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.sidebarBottom}>
             <View style={styles.liveIndicator}>
               <View style={styles.liveDot} />
@@ -2251,17 +2419,6 @@ export default function BusinessDashboard() {
           {activeTab === 'settings'     && renderSettings()}
         </View>
 
-        {/* ── Right sidebar — QR panel ────────────────────────── */}
-        <View style={[styles.qrSidebar, { backgroundColor: C.sidebar, borderLeftColor: C.sidebarBorder }]}>
-          <Text style={[styles.qrSidebarLabel, { color: C.textMuted }]}>Customer Portal</Text>
-          <Image source={{ uri: qrSrc }} style={styles.qrSidebarImg} resizeMode="contain" />
-          <TouchableOpacity
-            style={[styles.qrShareBtn, { backgroundColor: C.primary }]}
-            onPress={() => setQrOpen(true)}
-          >
-            <Text style={styles.qrShareBtnText}>Share QR Code</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* QR share popup */}

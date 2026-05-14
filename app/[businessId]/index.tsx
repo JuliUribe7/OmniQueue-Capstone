@@ -96,6 +96,7 @@ export default function CustomerPortal() {
   }, [bookDate, businessId, bookStaffId]);
 
   useEffect(() => {
+    api.logFunnelEvent(businessId, 'portal_view');
     api.getPublicBusiness(businessId)
       .then(({ business: biz }) => {
         setBusiness(biz);
@@ -226,6 +227,7 @@ export default function CustomerPortal() {
     setJoining(true);
     try {
       const { token } = await api.joinQueue(businessId, name.trim(), phone.trim(), selectedService.id, email.trim() || undefined, staffId !== 'any' ? staffId : undefined);
+      api.logFunnelEvent(businessId, 'confirmed');
       router.push(`/${businessId}/waiting?token=${token}`);
     } catch (e: any) {
       setJoinError(e?.message ?? 'Could not join queue. Please try again.');
@@ -269,6 +271,7 @@ export default function CustomerPortal() {
         bookTime,
         bookEmail.trim() || undefined,
       );
+      api.logFunnelEvent(businessId, 'confirmed');
       setBookConfirmed({
         id: appointment.id,
         date: bookDate,
@@ -437,7 +440,7 @@ export default function CustomerPortal() {
           <TouchableOpacity
             key={s.id}
             style={[styles.staffAvatarItem, bookStaffId === s.id && styles.staffAvatarItemSelected]}
-            onPress={() => { setBookStaffId(s.id); setBookDate(''); setBookTime(''); }}
+            onPress={() => { setBookStaffId(s.id); setBookDate(''); setBookTime(''); api.logFunnelEvent(businessId, 'staff_selected'); }}
             activeOpacity={0.7}
           >
             {s.photoUrl ? (
@@ -643,7 +646,7 @@ export default function CustomerPortal() {
                           style={[styles.timeCell,
                             isSelected && styles.timeCellSelected,
                             !available && styles.timeCellUnavailable]}
-                          onPress={() => available && setBookTime(t)}
+                          onPress={() => { if (available) { setBookTime(t); api.logFunnelEvent(businessId, 'time_selected'); } }}
                           activeOpacity={available ? 0.7 : 1}
                           disabled={!available}>
                           <Text style={[styles.timeCellText,
