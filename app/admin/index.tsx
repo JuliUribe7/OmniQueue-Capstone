@@ -21,6 +21,8 @@ type AdminBusiness = {
   name: string;
   type: string;
   plan: string;
+  smsSentTotal?: number;
+  emailSentTotal?: number;
   createdAt: string;
   services: { id: string; name: string; avgTime: number }[];
   tickets: ApiTicket[];
@@ -323,10 +325,12 @@ export default function AdminDashboard() {
 
   // ── Analytics tab ──────────────────────────────────────────────────────────
   function renderAnalytics() {
-    const totalBiz  = businesses.length;
-    const proBiz    = businesses.filter(b => b.plan === 'pro').length;
-    const basicBiz  = businesses.filter(b => b.plan !== 'pro').length;
-    const totalCust = businesses.reduce((sum, b) => sum + (b.tickets?.length ?? 0), 0);
+    const totalBiz    = businesses.length;
+    const proBiz      = businesses.filter(b => b.plan === 'pro').length;
+    const basicBiz    = businesses.filter(b => b.plan !== 'pro').length;
+    const totalCust   = businesses.reduce((sum, b) => sum + (b.tickets?.length ?? 0), 0);
+    const totalSms    = businesses.reduce((sum, b) => sum + (b.smsSentTotal ?? 0), 0);
+    const totalEmails = businesses.reduce((sum, b) => sum + (b.emailSentTotal ?? 0), 0);
     const proPercent   = totalBiz > 0 ? Math.round((proBiz / totalBiz) * 100) : 0;
     const basicPercent = 100 - proPercent;
 
@@ -349,10 +353,11 @@ export default function AdminDashboard() {
         <Text style={[styles.sectionTitle, { color: C.text }]}>Platform Overview</Text>
         <View style={styles.analyticsGrid}>
           {[
-            { val: totalBiz,   label: 'Total Businesses',   accent: '#2563eb' },
-            { val: proBiz,     label: 'Pro (Paying)',        accent: '#10b981' },
-            { val: basicBiz,   label: 'Basic / Free',        accent: '#f59e0b' },
-            { val: totalCust,  label: 'Customers Served',    accent: '#8b5cf6' },
+            { val: totalBiz,    label: 'Total Businesses',  accent: '#2563eb' },
+            { val: proBiz,      label: 'Pro (Paying)',       accent: '#10b981' },
+            { val: totalCust,   label: 'Customers Served',   accent: '#8b5cf6' },
+            { val: totalSms,    label: 'SMS Sent',           accent: '#f59e0b' },
+            { val: totalEmails, label: 'Emails Sent',        accent: '#06b6d4' },
           ].map(({ val, label, accent }) => (
             <View key={label} style={[styles.analyticsCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
               <Text style={[styles.analyticsNum, { color: accent }]}>{val}</Text>

@@ -140,6 +140,11 @@ export default function BusinessDashboard() {
   const [calView, setCalView] = useState<'today' | 'future' | 'calendar'>('today');
   const [apptStaffFilter, setApptStaffFilter] = useState<string>('all');
 
+  // Analytics date range
+  const [analyticsRange, setAnalyticsRange] = useState<'7d' | '30d' | '90d'>('30d');
+  const [analyticsTickets, setAnalyticsTickets] = useState<import('../../services/api').ApiTicket[]>([]);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   // Reviews
   const [reviews, setReviews] = useState<import('../../services/api').ApiReview[]>([]);
   const [reviewStats, setReviewStats] = useState<import('../../services/api').ApiReviewStats | null>(null);
@@ -244,6 +249,19 @@ export default function BusinessDashboard() {
     }, 5000);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    setAnalyticsLoading(true);
+    const end = new Date();
+    const start = new Date();
+    const days = analyticsRange === '7d' ? 7 : analyticsRange === '30d' ? 30 : 90;
+    start.setDate(start.getDate() - days);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    api.getTicketAnalytics(fmt(start), fmt(end))
+      .then(r => setAnalyticsTickets(r.tickets))
+      .catch(() => setAnalyticsTickets([]))
+      .finally(() => setAnalyticsLoading(false));
+  }, [analyticsRange]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function shareViaSMS() {
@@ -917,23 +935,25 @@ export default function BusinessDashboard() {
 
   // ── Analytics tab ─────────────────────────────────────────────────────────
   function renderCustomers() {
-    const todayKey = new Date().toISOString().split('T')[0];
+    // Use date-range tickets if loaded, fall back to all-time tickets
+    const t = analyticsTickets.length > 0 ? analyticsTickets : tickets;
+    const rangeLabel = analyticsRange === '7d' ? 'Last 7 Days' : analyticsRange === '30d' ? 'Last 30 Days' : 'Last 90 Days';
 
     // KPI computations
-    const doneCount     = tickets.filter(t => t.status === 'Done').length;
-    const unservedCount = tickets.filter(t => t.status === 'Unserved').length;
+    const doneCount     = t.filter(x => x.status === 'Done').length;
+    const unservedCount = t.filter(x => x.status === 'Unserved').length;
     const noShowRate    = doneCount + unservedCount > 0
       ? Math.round((unservedCount / (doneCount + unservedCount)) * 100) : 0;
 
     // How customers arrive
     const apptPhones  = new Set(appointments.map(a => a.phoneNumber));
     const scheduledCnt = appointments.length;
-    const walkinCnt    = tickets.filter(t => !apptPhones.has(t.phoneNumber)).length;
+    const walkinCnt    = t.filter(x => !apptPhones.has(x.phoneNumber)).length;
     const totalInflow  = scheduledCnt + walkinCnt || 1;
 
     // Service breakdown
     const svcCounts: Record<string, number> = {};
-    tickets.forEach(t => { svcCounts[t.serviceName] = (svcCounts[t.serviceName] ?? 0) + 1; });
+    t.forEach(x => { svcCounts[x.serviceName] = (svcCounts[x.serviceName] ?? 0) + 1; });
     const svcEntries  = Object.entries(svcCounts).sort((a, b) => b[1] - a[1]);
     const maxSvcCount = Math.max(1, ...Object.values(svcCounts));
 
@@ -941,8 +961,8 @@ export default function BusinessDashboard() {
     const DAYS  = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const HOURS = Array.from({ length: 11 }, (_, i) => i + 8); // 8am–6pm
     const heatmap: Record<string, number> = {};
-    tickets.forEach(t => {
-      const d = new Date(t.createdAt);
+    t.forEach(tk => {
+      const d = new Date(tk.createdAt);
       const dow = d.getDay();
       const h   = d.getHours();
       if (h >= 8 && h <= 18) {
@@ -960,11 +980,11 @@ export default function BusinessDashboard() {
     const now = Date.now();
     const phoneVisits: Record<string, number> = {};
     const phoneLastSeen: Record<string, number> = {};
-    tickets.forEach(t => {
-      if (!t.phoneNumber) return;
-      const ts = new Date(t.createdAt).getTime();
-      phoneVisits[t.phoneNumber] = (phoneVisits[t.phoneNumber] ?? 0) + 1;
-      phoneLastSeen[t.phoneNumber] = Math.max(phoneLastSeen[t.phoneNumber] ?? 0, ts);
+    t.forEach(tk => {
+      if (!tk.phoneNumber) return;
+      const ts = new Date(tk.createdAt).getTime();
+      phoneVisits[tk.phoneNumber] = (phoneVisits[tk.phoneNumber] ?? 0) + 1;
+      phoneLastSeen[tk.phoneNumber] = Math.max(phoneLastSeen[tk.phoneNumber] ?? 0, ts);
     });
     let loyal = 0, returning = 0, newCust = 0, atRisk = 0, lapsed = 0;
     Object.entries(phoneLastSeen).forEach(([phone, lastTs]) => {
@@ -981,8 +1001,23 @@ export default function BusinessDashboard() {
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
 
+        {/* Date range selector */}
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
+          {(['7d', '30d', '90d'] as const).map(r => (
+            <TouchableOpacity key={r} onPress={() => setAnalyticsRange(r)} activeOpacity={0.7}
+              style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20,
+                backgroundColor: analyticsRange === r ? C.primary : C.surface,
+                borderWidth: 1, borderColor: analyticsRange === r ? C.primary : C.border }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: analyticsRange === r ? '#fff' : C.textSub }}>
+                {r === '7d' ? '7 Days' : r === '30d' ? '30 Days' : '90 Days'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          {analyticsLoading && <ActivityIndicator size="small" color={C.primary} style={{ marginLeft: 4 }} />}
+        </View>
+
         {/* KPI Strip */}
-        <Text style={[styles.sectionTitle, { color: C.text }]}>Overview</Text>
+        <Text style={[styles.sectionTitle, { color: C.text }]}>Overview — {rangeLabel}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
           {[
             { val: doneCount + unservedCount,                                            label: 'Total Served',  accent: '#2563eb' },
