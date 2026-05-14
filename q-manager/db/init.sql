@@ -135,16 +135,6 @@ CREATE TABLE IF NOT EXISTS "Event" (
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS "Review" (
-  "id"           TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-  "businessId"   TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
-  "ticketId"     TEXT REFERENCES "Ticket"("id") ON DELETE SET NULL,
-  "customerName" TEXT,
-  "rating"       INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
-  "comment"      TEXT,
-  "createdAt"    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS "FunnelEvent" (
   "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   "businessId" TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,

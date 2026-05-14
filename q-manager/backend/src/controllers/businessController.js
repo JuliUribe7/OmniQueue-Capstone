@@ -4,7 +4,6 @@ const { v4: uuidv4 } = require('uuid');
 const { generateICS } = require('../services/icsService');
 const { sendEmail } = require('../services/resendService');
 const { createFunnelEvent } = require('../services/eventService');
-const { createReview, getReviewsForBusiness, getReviewStats } = require('../services/reviewService');
 
 async function getAllBusinesses(req, res, next) {
   try {
@@ -332,36 +331,6 @@ async function getPublicBusinessHours(req, res, next) {
   } catch (err) { next(err); }
 }
 
-async function submitReview(req, res, next) {
-  try {
-    const { businessId } = req.params;
-    const { ticketId, customerName, rating, comment } = req.body;
-    if (!rating || rating < 1 || rating > 5)
-      return res.status(400).json({ error: 'rating must be between 1 and 5' });
-    const review = await createReview(businessId, ticketId, customerName, rating, comment);
-    res.status(201).json({ review });
-  } catch (err) { next(err); }
-}
-
-async function getBusinessReviews(req, res, next) {
-  try {
-    const { businessId } = req.params;
-    const reviews = await getReviewsForBusiness(businessId);
-    const stats = await getReviewStats(businessId);
-    res.json({ reviews, stats });
-  } catch (err) { next(err); }
-}
-
-async function getMyReviews(req, res, next) {
-  try {
-    const business = await businessService.getBusinessByUser(req.user.id);
-    if (!business) return res.status(404).json({ error: 'No business found' });
-    const reviews = await getReviewsForBusiness(business.id);
-    const stats = await getReviewStats(business.id);
-    res.json({ reviews, stats });
-  } catch (err) { next(err); }
-}
-
 async function logFunnelEvent(req, res, next) {
   try {
     const { businessId } = req.params;
@@ -410,9 +379,6 @@ module.exports = {
   updateSubscription,
   getTicketAnalytics,
   logFunnelEvent,
-  submitReview,
-  getBusinessReviews,
-  getMyReviews,
   getBusinessHours,
   updateBusinessHours,
   getPublicBusinessHours,

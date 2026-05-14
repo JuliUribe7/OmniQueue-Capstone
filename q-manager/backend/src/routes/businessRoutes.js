@@ -11,8 +11,6 @@ router.post('/api/businesses/:businessId/appointments', businessController.creat
 router.get('/api/businesses/:businessId/appointments/public', businessController.getPublicAppointments);
 router.get('/api/businesses/:businessId/staff', businessController.getPublicStaff);
 router.post('/api/businesses/:businessId/funnel-event', businessController.logFunnelEvent);
-router.post('/api/businesses/:businessId/reviews', businessController.submitReview);
-router.get('/api/businesses/:businessId/reviews', businessController.getBusinessReviews);
 router.get('/api/businesses/:businessId/hours', businessController.getPublicBusinessHours);
 
 router.use(requireAuth);
@@ -48,9 +46,6 @@ router.put('/api/businesses/me/subscription', businessController.updateSubscript
 
 // Analytics
 router.get('/api/businesses/me/analytics/tickets', businessController.getTicketAnalytics);
-
-// Reviews
-router.get('/api/businesses/me/reviews', businessController.getMyReviews);
 
 // Business hours
 router.get('/api/businesses/me/hours', businessController.getBusinessHours);
