@@ -63,6 +63,26 @@ export interface ApiStaff {
   updatedAt: string;
 }
 
+export interface ApiReview {
+  id: string;
+  businessId: string;
+  ticketId: string;
+  customerName: string;
+  rating: number;
+  comment?: string;
+  createdAt: string;
+}
+
+export interface ApiReviewStats {
+  total: number;
+  average: number;
+  five: number;
+  four: number;
+  three: number;
+  two: number;
+  one: number;
+}
+
 export interface ApiAppointment {
   id: string;
   businessId: string;
@@ -166,6 +186,19 @@ export const api = {
   // Admin
   getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; plan: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
     apiFetch('/api/admin/businesses'),
+
+  // Reviews (public — customer-facing)
+  submitReview: (businessId: string, ticketId: string, customerName: string, rating: number, comment?: string): Promise<{ review: ApiReview }> =>
+    apiFetch(`/api/businesses/${businessId}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify({ ticketId, customerName, rating, comment }),
+    }),
+  getPublicReviews: (businessId: string): Promise<{ reviews: ApiReview[]; stats: ApiReviewStats }> =>
+    apiFetch(`/api/businesses/${businessId}/reviews`),
+
+  // Reviews (auth — business owner)
+  getMyReviews: (): Promise<{ reviews: ApiReview[]; stats: ApiReviewStats }> =>
+    apiFetch('/api/businesses/me/reviews'),
 
   // Public (customer-facing, no auth)
   getPublicBusiness: (businessId: string): Promise<{ business: { id: string; name: string; type: string; services: { id: string; name: string; avgTime: number }[] } }> =>
