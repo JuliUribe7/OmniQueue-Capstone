@@ -195,6 +195,10 @@ export const api = {
   getAdminBusinesses: (): Promise<{ businesses: { id: string; name: string; type: string; plan: string; createdAt: string; services: { id: string; name: string; avgTime: number }[]; tickets: ApiTicket[] }[] }> =>
     apiFetch('/api/admin/businesses'),
 
+  // Appointments (auth — delete)
+  deleteAppointment: (appointmentId: string): Promise<void> =>
+    apiFetch(`/api/appointments/${appointmentId}`, { method: 'DELETE' }),
+
   // Business hours
   getBusinessHours: (): Promise<{ hours: ApiBusinessHour[] }> =>
     apiFetch('/api/businesses/me/hours'),

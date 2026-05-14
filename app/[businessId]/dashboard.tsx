@@ -539,7 +539,6 @@ export default function BusinessDashboard() {
       if (!appt.serviceId) return;
       try {
         await api.addWalkin(appt.customerName, appt.phoneNumber, appt.serviceId, appt.staffId ?? undefined);
-        setHiddenApptIds(prev => new Set([...prev, appt.id]));
         const { tickets: tix } = await api.getQueue();
         setTickets(tix);
       } catch {}
@@ -648,7 +647,7 @@ export default function BusinessDashboard() {
                     )}
                     <TouchableOpacity
                       style={[styles.removeBtn, { borderColor: C.border }]}
-                      onPress={() => setHiddenApptIds(prev => new Set([...prev, appt.id]))}>
+                      onPress={async () => { try { await api.deleteAppointment(appt.id); setAppointments(prev => prev.filter(a => a.id !== appt.id)); } catch {} }}>
                       <Text style={[styles.removeBtnText, { color: C.textSub }]}>Remove</Text>
                     </TouchableOpacity>
                   </View>
@@ -1773,7 +1772,7 @@ export default function BusinessDashboard() {
               )}
               <TouchableOpacity
                 style={[styles.removeBtn, { borderColor: C.border }]}
-                onPress={() => setHiddenApptIds(prev => new Set([...prev, appt.id]))}>
+                onPress={async () => { try { await api.deleteAppointment(appt.id); setAppointments(prev => prev.filter(a => a.id !== appt.id)); } catch {} }}>
                 <Text style={[styles.removeBtnText, { color: C.textSub }]}>Remove</Text>
               </TouchableOpacity>
             </View>
