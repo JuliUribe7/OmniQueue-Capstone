@@ -59,6 +59,7 @@ export interface ApiStaff {
   role: string;
   phone: string;
   photoUrl: string;
+  color?: string;
   createdAt: string;
   updatedAt: string;
 }
