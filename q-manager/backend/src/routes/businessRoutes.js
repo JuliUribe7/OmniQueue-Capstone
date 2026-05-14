@@ -40,6 +40,7 @@ router.delete('/api/staff/:staffId', businessController.deleteStaff);
 
 // Appointments (auth)
 router.get('/api/businesses/me/appointments', businessController.getMyAppointments);
+router.delete('/api/appointments/:appointmentId', businessController.deleteAppointment);
 
 // Subscription
 router.get('/api/businesses/me/subscription', businessController.getSubscription);

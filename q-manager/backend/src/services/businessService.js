@@ -163,6 +163,14 @@ async function createAppointment(businessId, serviceId, staffId, customerName, p
   return res.rows[0];
 }
 
+async function deleteAppointment(appointmentId, businessId) {
+  const res = await query(
+    'DELETE FROM "Appointment" WHERE "id" = $1 AND "businessId" = $2 RETURNING *',
+    [appointmentId, businessId],
+  );
+  return res.rows[0] || null;
+}
+
 async function getPublicAppointments(businessId, date, staffId) {
   let queryText = 'SELECT "time", COUNT(*) AS count FROM "Appointment" WHERE "businessId" = $1 AND "date" = $2';
   const params = [businessId, date];
@@ -260,4 +268,5 @@ module.exports = {
   getAllBusinessesWithQueues,
   getBusinessHours,
   upsertBusinessHours,
+  deleteAppointment,
 };

@@ -254,6 +254,17 @@ async function createAppointment(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function deleteAppointment(req, res, next) {
+  try {
+    const { appointmentId } = req.params;
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const appointment = await businessService.deleteAppointment(appointmentId, business.id);
+    if (!appointment) return res.status(404).json({ error: 'Appointment not found' });
+    res.json({ appointment });
+  } catch (err) { next(err); }
+}
+
 async function getPublicAppointments(req, res, next) {
   try {
     const { businessId } = req.params;
@@ -405,4 +416,5 @@ module.exports = {
   getBusinessHours,
   updateBusinessHours,
   getPublicBusinessHours,
+  deleteAppointment,
 };
