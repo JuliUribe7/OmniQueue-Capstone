@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, ActivityIndicator, TextInput, Modal, ScrollView,
+  SafeAreaView, ActivityIndicator, Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -22,13 +22,6 @@ export default function CustomerWaiting() {
   // Snooze
   const [showSnooze, setShowSnooze] = useState(false);
   const [snoozing, setSnoozing]     = useState(false);
-
-  // Add another person
-  const [showAddAnother, setShowAddAnother] = useState(false);
-  const [addName, setAddName]               = useState('');
-  const [addPhone, setAddPhone]             = useState('');
-  const [addLoading, setAddLoading]         = useState(false);
-  const [addDone, setAddDone]               = useState(false);
 
   async function fetchStatus() {
     try {
@@ -70,18 +63,6 @@ export default function CustomerWaiting() {
     } catch {}
     setSnoozing(false);
     setShowSnooze(false);
-  }
-
-  async function handleAddAnother() {
-    if (!ticket || !addName.trim() || addPhone.replace(/\D/g, '').length < 10) return;
-    setAddLoading(true);
-    try {
-      await api.joinQueue(businessId, addName.trim(), addPhone.trim(), ticket.serviceId);
-      setAddDone(true);
-      setAddName(''); setAddPhone('');
-      setTimeout(() => { setAddDone(false); setShowAddAnother(false); }, 2500);
-    } catch {}
-    setAddLoading(false);
   }
 
   if (loading) {
@@ -191,11 +172,6 @@ export default function CustomerWaiting() {
             <Text style={styles.snoozeBtnText}>💤 Need More Time? Snooze</Text>
           </TouchableOpacity>
 
-          {/* Add another person */}
-          <TouchableOpacity style={styles.addAnotherBtn} onPress={() => setShowAddAnother(true)} activeOpacity={0.8}>
-            <Text style={styles.addAnotherBtnText}>+ Add Another Person</Text>
-          </TouchableOpacity>
-
           {/* Leave */}
           <TouchableOpacity style={styles.leaveBtn} onPress={handleLeave} disabled={leaving} activeOpacity={0.8}>
             {leaving ? <ActivityIndicator color="#dc2626" /> : <Text style={styles.leaveBtnText}>Leave Queue</Text>}
@@ -221,37 +197,6 @@ export default function CustomerWaiting() {
               ))}
             </View>
             <TouchableOpacity style={styles.modalCancel} onPress={() => setShowSnooze(false)}>
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add another person modal */}
-      <Modal visible={showAddAnother} transparent animationType="fade" onRequestClose={() => setShowAddAnother(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add Another Person</Text>
-            <Text style={styles.modalSub}>They'll be added to the queue for {ticket.serviceName}.</Text>
-            {addDone ? (
-              <Text style={{ color: '#10b981', fontWeight: '700', textAlign: 'center', marginTop: 16 }}>✅ Added to queue!</Text>
-            ) : (
-              <View style={{ gap: 12, marginTop: 16 }}>
-                <TextInput style={styles.modalInput} value={addName} onChangeText={setAddName}
-                  placeholder="Their name" placeholderTextColor="#9ca3af" autoCapitalize="words" />
-                <TextInput style={styles.modalInput} value={addPhone} onChangeText={setAddPhone}
-                  placeholder="Their phone number" placeholderTextColor="#9ca3af" keyboardType="phone-pad" />
-                <TouchableOpacity
-                  style={[styles.snoozeOption, (!addName.trim() || addPhone.replace(/\D/g,'').length < 10 || addLoading) && { opacity: 0.5 }]}
-                  onPress={handleAddAnother}
-                  disabled={!addName.trim() || addPhone.replace(/\D/g,'').length < 10 || addLoading}
-                  activeOpacity={0.8}>
-                  {addLoading ? <ActivityIndicator color="#2563eb" size="small" /> :
-                    <Text style={styles.snoozeOptionText}>Join Queue</Text>}
-                </TouchableOpacity>
-              </View>
-            )}
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setShowAddAnother(false)}>
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -332,9 +277,6 @@ const styles = StyleSheet.create({
 
   snoozeBtn: { backgroundColor: '#eff6ff', borderRadius: BorderRadius.lg, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#bfdbfe' },
   snoozeBtnText: { color: '#2563eb', fontWeight: '700', fontSize: 15 },
-  addAnotherBtn: { backgroundColor: '#f0fdf4', borderRadius: BorderRadius.lg, paddingVertical: 13, alignItems: 'center', borderWidth: 1, borderColor: '#bbf7d0' },
-  addAnotherBtnText: { color: '#059669', fontWeight: '700', fontSize: 15 },
-
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
   modalCard: { backgroundColor: '#fff', borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 },
   modalTitle: { fontSize: 18, fontWeight: '800', color: '#111827', textAlign: 'center' },
@@ -343,5 +285,4 @@ const styles = StyleSheet.create({
   snoozeOptionText: { color: '#2563eb', fontWeight: '700', fontSize: 15 },
   modalCancel: { marginTop: 14, alignItems: 'center', paddingVertical: 8 },
   modalCancelText: { color: '#9ca3af', fontSize: 14, fontWeight: '600' },
-  modalInput: { backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: BorderRadius.md, padding: 14, fontSize: 16, color: '#111827' },
 });
