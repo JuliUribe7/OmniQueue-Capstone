@@ -88,6 +88,7 @@ ALTER TABLE "Ticket" ADD COLUMN IF NOT EXISTS "staffId" TEXT REFERENCES "Staff"(
 ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "allowStaffSelection" BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "smsSentTotal" INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE "Business" ADD COLUMN IF NOT EXISTS "emailSentTotal" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "Staff" ADD COLUMN IF NOT EXISTS "color" TEXT NOT NULL DEFAULT '#0a7ea4';
 
 -- Staff table
 CREATE TABLE IF NOT EXISTS "Staff" (
@@ -97,8 +98,19 @@ CREATE TABLE IF NOT EXISTS "Staff" (
   "role"       TEXT NOT NULL DEFAULT 'Staff',
   "phone"      TEXT,
   "photoUrl"   TEXT,
+  "color"      TEXT NOT NULL DEFAULT '#0a7ea4',
   "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS "BusinessHours" (
+  "id"         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  "businessId" TEXT NOT NULL REFERENCES "Business"("id") ON DELETE CASCADE,
+  "dayOfWeek"  INTEGER NOT NULL CHECK ("dayOfWeek" >= 0 AND "dayOfWeek" <= 6),
+  "isOpen"     BOOLEAN NOT NULL DEFAULT TRUE,
+  "openTime"   TEXT NOT NULL DEFAULT '09:00',
+  "closeTime"  TEXT NOT NULL DEFAULT '17:00',
+  UNIQUE ("businessId", "dayOfWeek")
 );
 
 -- Appointment table

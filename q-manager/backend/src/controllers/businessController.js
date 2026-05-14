@@ -179,11 +179,11 @@ async function getPublicStaff(req, res, next) {
 
 async function addStaff(req, res, next) {
   try {
-    const { name, role, phone, photoUrl } = req.body;
+    const { name, role, phone, photoUrl, color } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const business = await businessService.getBusinessByUser(req.user.id);
     if (!business) return res.status(404).json({ error: 'No business found' });
-    const member = await businessService.addStaff(business.id, name, role, phone, photoUrl);
+    const member = await businessService.addStaff(business.id, name, role, phone, photoUrl, color);
     res.status(201).json({ staff: member });
   } catch (err) { next(err); }
 }
@@ -191,11 +191,11 @@ async function addStaff(req, res, next) {
 async function updateStaff(req, res, next) {
   try {
     const { staffId } = req.params;
-    const { name, role, phone, photoUrl } = req.body;
+    const { name, role, phone, photoUrl, color } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
     const business = await businessService.getBusinessByUser(req.user.id);
     if (!business) return res.status(404).json({ error: 'No business found' });
-    const member = await businessService.updateStaff(staffId, business.id, name, role, phone, photoUrl);
+    const member = await businessService.updateStaff(staffId, business.id, name, role, phone, photoUrl, color);
     if (!member) return res.status(404).json({ error: 'Staff not found' });
     res.json({ staff: member });
   } catch (err) { next(err); }
@@ -293,6 +293,34 @@ async function updateSubscription(req, res, next) {
   } catch (err) { next(err); }
 }
 
+async function getBusinessHours(req, res, next) {
+  try {
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const hours = await businessService.getBusinessHours(business.id);
+    res.json({ hours });
+  } catch (err) { next(err); }
+}
+
+async function updateBusinessHours(req, res, next) {
+  try {
+    const { hours } = req.body;
+    if (!Array.isArray(hours)) return res.status(400).json({ error: 'hours must be an array' });
+    const business = await businessService.getBusinessByUser(req.user.id);
+    if (!business) return res.status(404).json({ error: 'No business found' });
+    const result = await businessService.upsertBusinessHours(business.id, hours);
+    res.json({ hours: result });
+  } catch (err) { next(err); }
+}
+
+async function getPublicBusinessHours(req, res, next) {
+  try {
+    const { businessId } = req.params;
+    const hours = await businessService.getBusinessHours(businessId);
+    res.json({ hours });
+  } catch (err) { next(err); }
+}
+
 async function submitReview(req, res, next) {
   try {
     const { businessId } = req.params;
@@ -374,4 +402,7 @@ module.exports = {
   submitReview,
   getBusinessReviews,
   getMyReviews,
+  getBusinessHours,
+  updateBusinessHours,
+  getPublicBusinessHours,
 };

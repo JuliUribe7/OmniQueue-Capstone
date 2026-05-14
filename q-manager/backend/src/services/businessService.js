@@ -103,22 +103,46 @@ async function getStaff(businessId) {
   return res.rows;
 }
 
-async function addStaff(businessId, name, role, phone, photoUrl) {
+async function addStaff(businessId, name, role, phone, photoUrl, color) {
   const res = await query(
-    `INSERT INTO "Staff" ("businessId", "name", "role", "phone", "photoUrl")
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [businessId, name, role || 'Staff', phone || null, photoUrl || null],
+    `INSERT INTO "Staff" ("businessId", "name", "role", "phone", "photoUrl", "color")
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [businessId, name, role || 'Staff', phone || null, photoUrl || null, color || '#0a7ea4'],
   );
   return res.rows[0];
 }
 
-async function updateStaff(staffId, businessId, name, role, phone, photoUrl) {
+async function updateStaff(staffId, businessId, name, role, phone, photoUrl, color) {
   const res = await query(
-    `UPDATE "Staff" SET "name" = $1, "role" = $2, "phone" = $3, "photoUrl" = $4, "updatedAt" = NOW()
-     WHERE "id" = $5 AND "businessId" = $6 RETURNING *`,
-    [name, role || 'Staff', phone || null, photoUrl || null, staffId, businessId],
+    `UPDATE "Staff" SET "name" = $1, "role" = $2, "phone" = $3, "photoUrl" = $4, "color" = $5, "updatedAt" = NOW()
+     WHERE "id" = $6 AND "businessId" = $7 RETURNING *`,
+    [name, role || 'Staff', phone || null, photoUrl || null, color || '#0a7ea4', staffId, businessId],
   );
   return res.rows[0] || null;
+}
+
+async function getBusinessHours(businessId) {
+  const res = await query(
+    'SELECT * FROM "BusinessHours" WHERE "businessId" = $1 ORDER BY "dayOfWeek" ASC',
+    [businessId],
+  );
+  return res.rows;
+}
+
+async function upsertBusinessHours(businessId, hours) {
+  const results = [];
+  for (const h of hours) {
+    const res = await query(
+      `INSERT INTO "BusinessHours" ("businessId", "dayOfWeek", "isOpen", "openTime", "closeTime")
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT ("businessId", "dayOfWeek")
+       DO UPDATE SET "isOpen" = $3, "openTime" = $4, "closeTime" = $5
+       RETURNING *`,
+      [businessId, h.dayOfWeek, h.isOpen ?? true, h.openTime || '09:00', h.closeTime || '17:00'],
+    );
+    results.push(res.rows[0]);
+  }
+  return results;
 }
 
 async function deleteStaff(staffId, businessId) {
@@ -234,4 +258,6 @@ module.exports = {
   updateSubscription,
   getTicketsByDateRange,
   getAllBusinessesWithQueues,
+  getBusinessHours,
+  upsertBusinessHours,
 };
