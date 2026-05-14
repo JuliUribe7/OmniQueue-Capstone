@@ -133,6 +133,5 @@ See `HANDOFF.txt` for the full list of required environment variables and third-
 ## Team
 
 Developed as a capstone project by Team 3.
-- Backend: Juliana Uribe
-- Frontend: [Frontend teammate]
-- Backend: [Backend teammate]
+- Backend: Juliana Uribe, Ebenezzer Matthew
+- Frontend: Taha Tafa, Samuel Wright, Doriva Wright 
