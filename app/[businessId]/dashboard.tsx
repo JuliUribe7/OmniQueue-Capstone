@@ -10,6 +10,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BorderRadius, Spacing } from '../../constants/theme';
+import { Feather } from '@expo/vector-icons';
 import { api, ApiBusiness, ApiService, ApiTicket, ApiStaff } from '../../services/api';
 
 type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'appointments' | 'customers' | 'billing' | 'settings';
@@ -34,16 +35,16 @@ function readTheme(): boolean {
   catch { return false; }
 }
 
-const NAV_ITEMS: { tab: Tab; icon: string; label: string }[] = [
-  { tab: 'home',         icon: '🏠', label: 'Home'         },
-  { tab: 'queue',        icon: '📋', label: 'Live Queue'   },
-  { tab: 'walkin',       icon: '➕', label: 'Add Walk-in'  },
-  { tab: 'services',     icon: '⚙️',  label: 'Services'    },
-  { tab: 'staff',        icon: '👤', label: 'Staff'        },
-  { tab: 'appointments', icon: '📅', label: 'Appointments' },
-  { tab: 'customers',    icon: '📊', label: 'Analytics'    },
-  { tab: 'billing', icon: '💳', label: 'Billing' },
-  { tab: 'settings',     icon: '🔧', label: 'Settings'     },
+const NAV_ITEMS: { tab: Tab; icon: React.ComponentProps<typeof Feather>['name']; label: string }[] = [
+  { tab: 'home',         icon: 'home',        label: 'Home'         },
+  { tab: 'queue',        icon: 'list',        label: 'Live Queue'   },
+  { tab: 'walkin',       icon: 'user-plus',   label: 'Add Walk-in'  },
+  { tab: 'services',     icon: 'tool',        label: 'Services'     },
+  { tab: 'staff',        icon: 'users',       label: 'Staff'        },
+  { tab: 'appointments', icon: 'calendar',    label: 'Appointments' },
+  { tab: 'customers',    icon: 'bar-chart-2', label: 'Analytics'    },
+  { tab: 'billing',      icon: 'credit-card', label: 'Billing'      },
+  { tab: 'settings',     icon: 'settings',    label: 'Settings'     },
 ];
 
 function timeAgo(iso: string): string {
@@ -2328,7 +2329,7 @@ export default function BusinessDashboard() {
                   onPress={() => setActiveTab(tab)}
                   activeOpacity={0.7}
                 >
-                  {/* icon removed */}
+                  <Feather name={icon} size={15} color={isActive ? C.navActiveText : C.navText} style={{ width: 18 }} />
                   <Text style={[styles.navLabel, { color: C.navText }, isActive && [styles.navLabelActive, { color: C.navActiveText }]]}>
                     {label}
                   </Text>
