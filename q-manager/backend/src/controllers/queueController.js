@@ -69,4 +69,15 @@ async function removeTicket(req, res, next) {
   }
 }
 
-module.exports = { join, getStatus, getQueue, callTicket, markDone, removeTicket };
+async function snoozeTicket(req, res, next) {
+  try {
+    const { ticketId } = req.params;
+    const ticket = await queueService.snoozeTicket(ticketId);
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { join, getStatus, getQueue, callTicket, markDone, snoozeTicket, removeTicket };

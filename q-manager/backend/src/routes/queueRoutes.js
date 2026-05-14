@@ -7,6 +7,7 @@ router.get('/api/entries/:token', queueController.getStatus);
 router.get('/api/queue/:serviceId', queueController.getQueue);
 router.put('/api/tickets/:ticketId/call', queueController.callTicket);
 router.put('/api/tickets/:ticketId/done', queueController.markDone);
+router.put('/api/tickets/:ticketId/snooze', queueController.snoozeTicket);
 router.delete('/api/tickets/:ticketId', queueController.removeTicket);
 
 module.exports = router;

@@ -79,7 +79,19 @@ async function getEntryByToken(customerToken) {
      ORDER BY t."createdAt" DESC LIMIT 1`,
     [customerToken],
   );
-  return res.rows[0] || null;
+  const ticket = res.rows[0];
+  if (!ticket) return null;
+
+  // Return live position — count of Waiting/Called tickets with position <= this ticket's position
+  const posRes = await query(
+    `SELECT COUNT(*) as "livePosition" FROM "Ticket"
+     WHERE "serviceId" = $1
+       AND "status" IN ('Waiting', 'Called')
+       AND "position" <= $2`,
+    [ticket.serviceId, ticket.position],
+  );
+  ticket.livePosition = parseInt(posRes.rows[0].livePosition, 10);
+  return ticket;
 }
 
 async function getQueueByService(serviceId) {
@@ -106,6 +118,25 @@ async function markTicketDone(ticketId) {
   return res.rows[0] || null;
 }
 
+async function snoozeTicket(ticketId) {
+  const ticketRes = await query('SELECT * FROM "Ticket" WHERE "id" = $1', [ticketId]);
+  const ticket = ticketRes.rows[0];
+  if (!ticket) return null;
+
+  const maxRes = await query(
+    `SELECT COALESCE(MAX("position"), 0) as max FROM "Ticket"
+     WHERE "serviceId" = $1 AND "status" = 'Waiting'`,
+    [ticket.serviceId],
+  );
+  const newPosition = parseInt(maxRes.rows[0].max, 10) + 1;
+
+  const res = await query(
+    `UPDATE "Ticket" SET "position" = $1, "updatedAt" = NOW() WHERE "id" = $2 RETURNING *`,
+    [newPosition, ticketId],
+  );
+  return res.rows[0] || null;
+}
+
 async function removeTicket(ticketId) {
   await query('DELETE FROM "Event" WHERE "ticketId" = $1', [ticketId]);
   const res = await query(
@@ -115,4 +146,4 @@ async function removeTicket(ticketId) {
   return res.rows[0] || null;
 }
 
-module.exports = { joinQueue, getEntryByToken, getQueueByService, callTicket, markTicketDone, removeTicket };
+module.exports = { joinQueue, getEntryByToken, getQueueByService, callTicket, markTicketDone, snoozeTicket, removeTicket };
