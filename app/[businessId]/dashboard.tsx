@@ -2606,7 +2606,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 18, fontWeight: '700' },
   emptySub: { fontSize: 13, textAlign: 'center' },
 
-  fieldLabel: { fontSize: 13, fontWeight: '600', marginBottom: -Spacing.sm },
+  fieldLabel: { fontSize: 13, fontWeight: '600', marginBottom: 4 },
   input: {
     borderRadius: BorderRadius.md, borderWidth: 1,
     fontSize: 16, padding: Spacing.md,
