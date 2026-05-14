@@ -117,6 +117,8 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ customerName, phoneNumber, serviceId, staffId }),
     }),
+  snoozeTicket: (ticketId: string, minutes: number): Promise<{ ticket: ApiTicket }> =>
+    apiFetch(`/api/tickets/${ticketId}/snooze`, { method: 'PUT', body: JSON.stringify({ minutes }) }),
   markDone: (ticketId: string) =>
     apiFetch(`/api/tickets/${ticketId}/done`, { method: 'PUT' }),
   callTicket: (ticketId: string) =>

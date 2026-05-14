@@ -84,6 +84,7 @@ export default function BusinessDashboard() {
   const [newServiceName, setNewServiceName] = useState('');
   const [newServiceTime, setNewServiceTime] = useState('');
   const [servicesSaved, setServicesSaved]   = useState(false);
+  const [serviceDeleteError, setServiceDeleteError] = useState('');
   const [savingServices, setSavingServices] = useState(false);
 
   // Walk-in form
@@ -138,6 +139,7 @@ export default function BusinessDashboard() {
   const [appointments, setAppointments] = useState<import('../../services/api').ApiAppointment[]>([]);
   const [calView, setCalView] = useState<'today' | 'future' | 'calendar'>('today');
   const [apptStaffFilter, setApptStaffFilter] = useState<string>('all');
+  const [calendarOffset, setCalendarOffset] = useState(0); // months from today
 
   // Analytics date range
   const [analyticsRange, setAnalyticsRange] = useState<'7d' | '30d' | '90d'>('30d');
@@ -253,7 +255,7 @@ export default function BusinessDashboard() {
     start.setDate(start.getDate() - days);
     const fmt = (d: Date) => d.toISOString().split('T')[0];
     api.getTicketAnalytics(fmt(start), fmt(end))
-      .then(r => setAnalyticsTickets(r.tickets))
+      .then(r => setAnalyticsTickets(r.tickets ?? []))
       .catch(() => setAnalyticsTickets([]))
       .finally(() => setAnalyticsLoading(false));
   }, [analyticsRange]);
@@ -335,10 +337,14 @@ export default function BusinessDashboard() {
   }
 
   async function removeService(id: string) {
+    setServiceDeleteError('');
     try {
       await api.deleteService(id);
       setServices(prev => prev.filter(s => s.id !== id));
-    } catch {}
+    } catch {
+      setServiceDeleteError('Cannot delete — this service has existing appointments. Remove those first.');
+      setTimeout(() => setServiceDeleteError(''), 4000);
+    }
   }
 
   function updateServiceLocal(id: string, field: 'name' | 'avgTime', value: string) {
@@ -534,6 +540,8 @@ export default function BusinessDashboard() {
       if (!appt.serviceId) return;
       try {
         await api.addWalkin(appt.customerName, appt.phoneNumber, appt.serviceId, appt.staffId ?? undefined);
+        await api.deleteAppointment(appt.id);
+        setAppointments(prev => prev.filter(a => a.id !== appt.id));
         const { tickets: tix } = await api.getQueue();
         setTickets(tix);
       } catch {}
@@ -877,6 +885,11 @@ export default function BusinessDashboard() {
               <Text style={styles.successText}>✅ Services saved</Text>
             </View>
           )}
+          {!!serviceDeleteError && (
+            <View style={[styles.successBanner, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}>
+              <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '600' }}>{serviceDeleteError}</Text>
+            </View>
+          )}
 
           {services.map(service => (
             <View key={service.id} style={[styles.serviceEditRow, { backgroundColor: C.surface, borderColor: C.border }]}>
@@ -930,7 +943,7 @@ export default function BusinessDashboard() {
   // ── Analytics tab ─────────────────────────────────────────────────────────
   function renderCustomers() {
     // Use date-range tickets if loaded, fall back to all-time tickets
-    const t = analyticsTickets.length > 0 ? analyticsTickets : tickets;
+    const t = (analyticsTickets && analyticsTickets.length > 0) ? analyticsTickets : (tickets ?? []);
     const rangeLabel = analyticsRange === '7d' ? 'Last 7 Days' : analyticsRange === '30d' ? 'Last 30 Days' : 'Last 90 Days';
 
     // KPI computations
@@ -1673,6 +1686,8 @@ export default function BusinessDashboard() {
                   onPress={async () => {
                     try {
                       await api.addWalkin(appt.customerName, appt.phoneNumber, appt.serviceId!, appt.staffId ?? undefined);
+                      await api.deleteAppointment(appt.id);
+                      setAppointments(prev => prev.filter(a => a.id !== appt.id));
                       const { tickets: tix } = await api.getQueue();
                       setTickets(tix);
                     } catch {}
@@ -1886,8 +1901,9 @@ export default function BusinessDashboard() {
 
     // ── Business Calendar — full month grid ──
     function CalendarView() {
-      const year        = now.getFullYear();
-      const month       = now.getMonth();
+      const calDate     = new Date(now.getFullYear(), now.getMonth() + calendarOffset, 1);
+      const year        = calDate.getFullYear();
+      const month       = calDate.getMonth();
       const firstDay    = new Date(year, month, 1).getDay();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
       const offset      = firstDay === 0 ? 6 : firstDay - 1;
@@ -1900,9 +1916,17 @@ export default function BusinessDashboard() {
       const DLABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
       return (
         <ScrollView contentContainerStyle={{ padding: 8 }} showsVerticalScrollIndicator={false}>
-          <Text style={{ fontSize: 15, fontWeight: '700', color: C.text, textAlign: 'center', marginBottom: 10 }}>
-            {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, paddingHorizontal: 4 }}>
+            <TouchableOpacity onPress={() => setCalendarOffset(o => o - 1)} style={{ padding: 8 }}>
+              <Text style={{ fontSize: 20, color: C.primary, fontWeight: '700' }}>‹</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: C.text }}>
+              {calDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </Text>
+            <TouchableOpacity onPress={() => setCalendarOffset(o => o + 1)} style={{ padding: 8 }}>
+              <Text style={{ fontSize: 20, color: C.primary, fontWeight: '700' }}>›</Text>
+            </TouchableOpacity>
+          </View>
           <View style={{ flexDirection: 'row', marginBottom: 6 }}>
             {DLABELS.map(d => (
               <View key={d} style={{ flex: 1, alignItems: 'center', paddingVertical: 6 }}>
