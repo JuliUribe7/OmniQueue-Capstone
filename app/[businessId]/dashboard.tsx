@@ -118,11 +118,7 @@ export default function BusinessDashboard() {
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&color=000000&bgcolor=ffffff&data=${encodeURIComponent(portalUrl)}`;
 
   // Settings tab state
-  const [settingsHours, setSettingsHours] = useState({
-    mon: '9:00 AM – 6:00 PM', tue: '9:00 AM – 6:00 PM', wed: '9:00 AM – 6:00 PM',
-    thu: '9:00 AM – 6:00 PM', fri: '9:00 AM – 6:00 PM',
-    sat: '10:00 AM – 4:00 PM', sun: 'Closed',
-  });
+  const [businessHours, setBusinessHours] = useState<import('../../services/api').ApiBusinessHour[]>([]);
   const [hoursSaved, setHoursSaved] = useState(false);
   const [notificationChannel, setNotificationChannel] = useState<'sms' | 'email' | 'both'>('sms');
   const [allowStaffSelection, setAllowStaffSelection] = useState(true);
@@ -136,6 +132,7 @@ export default function BusinessDashboard() {
   const [newStaffRole, setNewStaffRole]   = useState('');
   const [newStaffPhone, setNewStaffPhone] = useState('');
   const [newStaffPhoto, setNewStaffPhoto] = useState('');
+  const [newStaffColor, setNewStaffColor] = useState('#2563eb');
   const [staffSaving, setStaffSaving]     = useState(false);
 
   // Appointments
@@ -182,6 +179,7 @@ export default function BusinessDashboard() {
       // Just check current status
       api.getGoogleStatus().then(r => setGoogleConnected(r.connected)).catch(() => {});
       api.getMyReviews().then(r => { setReviews(r.reviews); setReviewStats(r.stats); }).catch(() => {});
+      api.getBusinessHours().then(r => setBusinessHours(r.hours)).catch(() => {});
       const clean = window.location.pathname;
       if (isSuccess) window.history.replaceState({}, '', clean);
       return;
@@ -1127,7 +1125,7 @@ export default function BusinessDashboard() {
 
     function openAddModal() {
       setEditingStaffId(null);
-      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto(''); setNewStaffColor('#2563eb');
       setShowStaffModal(true);
     }
 
@@ -1137,13 +1135,14 @@ export default function BusinessDashboard() {
       setNewStaffRole(member.role ?? '');
       setNewStaffPhone(member.phone ?? '');
       setNewStaffPhoto(member.photoUrl ?? '');
+      setNewStaffColor(member.color ?? '#2563eb');
       setShowStaffModal(true);
     }
 
     function closeModal() {
       setShowStaffModal(false);
       setEditingStaffId(null);
-      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto('');
+      setNewStaffName(''); setNewStaffRole(''); setNewStaffPhone(''); setNewStaffPhoto(''); setNewStaffColor('#2563eb');
     }
 
     function pickPhoto(useCamera: boolean) {
@@ -1185,13 +1184,13 @@ export default function BusinessDashboard() {
           const { staff: updated } = await api.updateStaff(
             editingStaffId,
             newStaffName.trim(), newStaffRole.trim() || 'Staff',
-            newStaffPhone.trim(), newStaffPhoto.trim(),
+            newStaffPhone.trim(), newStaffPhoto.trim(), newStaffColor,
           );
           setStaff(prev => prev.map(s => s.id === editingStaffId ? updated : s));
         } else {
           const { staff: member } = await api.addStaff(
             newStaffName.trim(), newStaffRole.trim() || 'Staff',
-            newStaffPhone.trim(), newStaffPhoto.trim(),
+            newStaffPhone.trim(), newStaffPhoto.trim(), newStaffColor,
           );
           setStaff(prev => [...prev, member]);
         }
@@ -1370,6 +1369,19 @@ export default function BusinessDashboard() {
                     placeholder="(555) 000-0000" placeholderTextColor={C.placeholder}
                     keyboardType="phone-pad"
                   />
+                </View>
+
+                {/* Staff color */}
+                <View style={{ marginTop: 12, gap: 6 }}>
+                  <Text style={[styles.fieldLabel, { color: C.textSub }]}>Staff Color</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {['#2563eb','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4','#ec4899','#f97316','#84cc16','#6366f1'].map(c => (
+                      <TouchableOpacity key={c} onPress={() => setNewStaffColor(c)} activeOpacity={0.7}
+                        style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: c,
+                          borderWidth: newStaffColor === c ? 3 : 0, borderColor: '#fff',
+                          shadowColor: '#000', shadowOpacity: newStaffColor === c ? 0.3 : 0, shadowRadius: 4, elevation: newStaffColor === c ? 4 : 0 }} />
+                    ))}
+                  </View>
                 </View>
 
                 {/* Action buttons */}
@@ -2072,24 +2084,56 @@ export default function BusinessDashboard() {
             </View>
           )}
 
-          <View style={{ marginTop: 12, gap: 10 }}>
-            {days.map(({ key, label }) => (
-              <View key={key} style={styles.hoursRow}>
-                <Text style={[styles.hoursDay, { color: C.textSub }]}>{label}</Text>
-                <TextInput
-                  style={[styles.hoursInput, { backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
-                  value={settingsHours[key as keyof typeof settingsHours]}
-                  onChangeText={v => setSettingsHours(h => ({ ...h, [key]: v }))}
-                  placeholder="e.g. 9:00 AM – 6:00 PM"
-                  placeholderTextColor={C.placeholder}
-                />
-              </View>
-            ))}
+          <View style={{ marginTop: 12, gap: 8 }}>
+            {[0,1,2,3,4,5,6].map(dow => {
+              const DAY_LABELS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+              const h = businessHours.find(x => x.dayOfWeek === dow) ?? { dayOfWeek: dow, isOpen: dow >= 1 && dow <= 5, openTime: '09:00', closeTime: '17:00' };
+              const update = (patch: Partial<typeof h>) => {
+                setBusinessHours(prev => {
+                  const exists = prev.find(x => x.dayOfWeek === dow);
+                  if (exists) return prev.map(x => x.dayOfWeek === dow ? { ...x, ...patch } : x);
+                  return [...prev, { ...h, ...patch }];
+                });
+              };
+              return (
+                <View key={dow} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, borderTopWidth: dow === 0 ? 0 : 1, borderTopColor: C.border }}>
+                  <Text style={{ width: 90, fontSize: 13, fontWeight: '600', color: C.textSub }}>{DAY_LABELS[dow]}</Text>
+                  <TouchableOpacity
+                    onPress={() => update({ isOpen: !h.isOpen })}
+                    style={{ width: 40, height: 22, borderRadius: 11, backgroundColor: h.isOpen ? C.primary : C.border, padding: 2, justifyContent: 'center' }}>
+                    <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#fff', transform: [{ translateX: h.isOpen ? 18 : 0 }] }} />
+                  </TouchableOpacity>
+                  {h.isOpen ? (
+                    <View style={{ flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                      <TextInput
+                        style={[styles.hoursInput, { flex: 1, backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
+                        value={h.openTime} onChangeText={v => update({ openTime: v })}
+                        placeholder="09:00" placeholderTextColor={C.placeholder}
+                      />
+                      <Text style={{ color: C.textMuted }}>–</Text>
+                      <TextInput
+                        style={[styles.hoursInput, { flex: 1, backgroundColor: C.surfaceAlt, borderColor: C.border, color: C.text }]}
+                        value={h.closeTime} onChangeText={v => update({ closeTime: v })}
+                        placeholder="17:00" placeholderTextColor={C.placeholder}
+                      />
+                    </View>
+                  ) : (
+                    <Text style={{ fontSize: 13, color: C.textMuted, flex: 1 }}>Closed</Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
 
           <TouchableOpacity
             style={[styles.saveServicesBtn, { marginTop: 16 }]}
-            onPress={() => { setHoursSaved(true); setTimeout(() => setHoursSaved(false), 2500); }}
+            onPress={async () => {
+              try {
+                await api.updateBusinessHours(businessHours);
+                setHoursSaved(true);
+                setTimeout(() => setHoursSaved(false), 2500);
+              } catch {}
+            }}
           >
             <Text style={styles.addBtnText}>Save Hours</Text>
           </TouchableOpacity>
