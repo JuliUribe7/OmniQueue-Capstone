@@ -1,7 +1,7 @@
 // Super admin dashboard — fully independent page with its own login
 // Access at /admin directly — no link from the business landing page
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   SafeAreaView, TextInput, KeyboardAvoidingView, Platform, Image,
@@ -11,7 +11,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { api, ApiTicket } from '../../services/api';
 import { BorderRadius, Spacing } from '../../constants/theme';
-import { Feather } from '@expo/vector-icons';
 
 const ADMIN_PASSWORD = 'admin1234';
 
@@ -734,18 +733,18 @@ export default function AdminDashboard() {
           </View>
           <View style={styles.navItems}>
             {([
-              { t: 'businesses', icon: 'grid',        label: 'Businesses' },
-              { t: 'analytics',  icon: 'bar-chart-2', label: 'Analytics'  },
-              { t: 'liveview',   icon: 'activity',    label: 'Live View'  },
-              { t: 'billing',    icon: 'credit-card', label: 'Billing'    },
-              { t: 'settings',   icon: 'settings',    label: 'Settings'   },
-            ] as { t: Tab; icon: React.ComponentProps<typeof Feather>['name']; label: string }[]).map(({ t, icon, label }) => (
+              { t: 'businesses', icon: '🏢', label: 'Businesses' },
+              { t: 'analytics',  icon: '📊', label: 'Analytics'  },
+              { t: 'liveview',   icon: '🔴', label: 'Live View'  },
+              { t: 'billing',    icon: '💳', label: 'Billing'    },
+              { t: 'settings',   icon: '⚙️',  label: 'Settings'   },
+            ] as { t: Tab; icon: string; label: string }[]).map(({ t, icon, label }) => (
               <TouchableOpacity
                 key={t}
                 style={[styles.navItem, tab === t && [styles.navItemActive, { backgroundColor: C.navActive }]]}
                 onPress={() => setTab(t)}
               >
-                <Feather name={icon} size={15} color={tab === t ? C.navActiveText : C.navText} style={{ width: 18 }} />
+                <Text style={styles.navIcon}>{icon}</Text>
                 <Text style={[styles.navLabel, { color: C.navText },
                   tab === t && [styles.navLabelActive, { color: C.navActiveText }]]}>
                   {label}
