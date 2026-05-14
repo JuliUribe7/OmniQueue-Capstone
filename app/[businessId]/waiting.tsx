@@ -120,7 +120,7 @@ export default function CustomerWaiting() {
     );
   }
 
-  const position = ticket.position;
+  const position = ticket.livePosition ?? ticket.position;
   const avgTime = ticket.avgTime ?? 0;
   const wait = avgTime * position;
 

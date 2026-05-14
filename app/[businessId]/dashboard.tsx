@@ -612,15 +612,20 @@ export default function BusinessDashboard() {
                   {/* Top row */}
                   <View style={styles.ticketTop}>
                     <View style={[styles.positionBadge, { backgroundColor: badgeClr }]}>
-                      <Text style={[styles.positionText, { fontSize: 9 }]}>{fmtTime(appt.time)}</Text>
+                      <Text style={styles.positionText}>#{listIndex + 1}</Text>
                     </View>
                     <View style={styles.customerInfo}>
                       <Text style={[styles.customerName, { color: C.text }]}>{appt.customerName}</Text>
                       <Text style={[styles.customerPhone, { color: C.textMuted }]}>{appt.phoneNumber}</Text>
                     </View>
-                    <View style={[styles.statusPill, { backgroundColor: badgeClr + '22' }]}>
-                      <Text style={[styles.statusPillText, { color: badgeClr }]}>{badgeTxt}</Text>
+                    <View style={{ backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginRight: 4 }}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563eb' }}>Appointment</Text>
                     </View>
+                    {(isOver || isSoon) && (
+                      <View style={[styles.statusPill, { backgroundColor: badgeClr + '22' }]}>
+                        <Text style={[styles.statusPillText, { color: badgeClr }]}>{isOver ? 'Overdue' : 'Due Soon'}</Text>
+                      </View>
+                    )}
                   </View>
                   {/* Meta */}
                   <View style={styles.ticketMeta}>
@@ -632,7 +637,7 @@ export default function BusinessDashboard() {
                       </>
                     )}
                     <Text style={[styles.metaDot, { color: C.border }]}>·</Text>
-                    <Text style={[styles.metaText, { color: C.textSub }]}>Appointment</Text>
+                    <Text style={[styles.metaText, { color: C.textSub }]}>{fmtTime(appt.time)}</Text>
                   </View>
                   {/* Actions */}
                   <View style={styles.ticketActions}>
