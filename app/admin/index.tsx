@@ -14,7 +14,7 @@ import { BorderRadius, Spacing } from '../../constants/theme';
 
 const ADMIN_PASSWORD = 'admin1234';
 
-type Tab = 'businesses' | 'analytics' | 'liveview' | 'settings';
+type Tab = 'businesses' | 'analytics' | 'liveview' | 'billing' | 'settings';
 
 type AdminBusiness = {
   id: string;
@@ -610,6 +610,117 @@ export default function AdminDashboard() {
     );
   }
 
+  // ── Billing tab ─────────────────────────────────────────────────────────────
+  function renderAdminBilling() {
+    const proBiz  = businesses.filter(b => b.plan === 'pro');
+    const freeBiz = businesses.filter(b => b.plan !== 'pro');
+    const mrr     = proBiz.length * 20;
+    const arr     = mrr * 12;
+
+    function fmtDate(d: string) {
+      return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    function monthsActive(createdAt: string) {
+      const start = new Date(createdAt);
+      const now   = new Date();
+      return Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()));
+    }
+
+    return (
+      <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
+
+        {/* Revenue KPIs */}
+        <Text style={[styles.sectionTitle, { color: C.text }]}>Revenue Overview</Text>
+        <View style={styles.analyticsGrid}>
+          {[
+            { label: 'MRR',              val: `$${mrr}`,           sub: 'monthly recurring', accent: '#2563eb' },
+            { label: 'ARR',              val: `$${arr}`,           sub: 'annualized',         accent: '#7c3aed' },
+            { label: 'Pro Subscribers',  val: String(proBiz.length),  sub: 'paying',          accent: '#059669' },
+            { label: 'Free Plan',        val: String(freeBiz.length), sub: 'no revenue',      accent: '#9ca3af' },
+          ].map(({ label, val, sub, accent }) => (
+            <View key={label} style={[styles.analyticsCard, { backgroundColor: C.surface, borderColor: C.border, borderTopColor: accent }]}>
+              <Text style={[styles.analyticsNum, { color: accent }]}>{val}</Text>
+              <Text style={[styles.analyticsLbl, { color: C.textMuted }]}>{label}</Text>
+              <Text style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{sub}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Paying subscribers table */}
+        <Text style={[styles.sectionTitle, { color: C.text }]}>
+          Paying Subscribers ({proBiz.length})
+        </Text>
+        <View style={[styles.busiestCard, { backgroundColor: C.surface, borderColor: C.border, padding: 0, overflow: 'hidden' }]}>
+          <View style={{ flexDirection: 'row', padding: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.surfaceAlt }}>
+            <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase' }}>Business</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase' }}>Type</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'center' }}>Status</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'center' }}>Since</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'center' }}>Months</Text>
+            <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'right' }}>Revenue</Text>
+          </View>
+          {proBiz.length === 0 ? (
+            <View style={{ padding: 28, alignItems: 'center' }}>
+              <Text style={{ color: C.textMuted, fontSize: 14 }}>No Pro subscribers yet.</Text>
+            </View>
+          ) : (
+            proBiz.map((b, i) => (
+              <View key={b.id} style={{
+                flexDirection: 'row', padding: 12, alignItems: 'center',
+                borderBottomWidth: i < proBiz.length - 1 ? 1 : 0, borderBottomColor: C.border,
+              }}>
+                <Text style={{ flex: 2, fontSize: 13, fontWeight: '600', color: C.text }} numberOfLines={1}>{b.name}</Text>
+                <Text style={{ flex: 1, fontSize: 12, color: C.textSub }} numberOfLines={1}>{b.type}</Text>
+                <View style={{ flex: 1, alignItems: 'center' }}>
+                  <View style={{ backgroundColor: '#d1fae5', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>Active</Text>
+                  </View>
+                </View>
+                <Text style={{ flex: 1, fontSize: 12, color: C.textSub, textAlign: 'center' }}>{fmtDate(b.createdAt)}</Text>
+                <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: C.text, textAlign: 'center' }}>{monthsActive(b.createdAt)}mo</Text>
+                <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#059669', textAlign: 'right' }}>$20/mo</Text>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Free plan businesses */}
+        {freeBiz.length > 0 && (
+          <>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>
+              Free Plan ({freeBiz.length})
+            </Text>
+            <View style={[styles.busiestCard, { backgroundColor: C.surface, borderColor: C.border, padding: 0, overflow: 'hidden' }]}>
+              <View style={{ flexDirection: 'row', padding: 12, borderBottomWidth: 1, borderBottomColor: C.border, backgroundColor: C.surfaceAlt }}>
+                <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase' }}>Business</Text>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase' }}>Type</Text>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'center' }}>Status</Text>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'center' }}>Member Since</Text>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', textAlign: 'right' }}>Revenue</Text>
+              </View>
+              {freeBiz.map((b, i) => (
+                <View key={b.id} style={{
+                  flexDirection: 'row', padding: 12, alignItems: 'center',
+                  borderBottomWidth: i < freeBiz.length - 1 ? 1 : 0, borderBottomColor: C.border,
+                }}>
+                  <Text style={{ flex: 2, fontSize: 13, fontWeight: '600', color: C.text }} numberOfLines={1}>{b.name}</Text>
+                  <Text style={{ flex: 1, fontSize: 12, color: C.textSub }} numberOfLines={1}>{b.type}</Text>
+                  <View style={{ flex: 1, alignItems: 'center' }}>
+                    <View style={{ backgroundColor: '#f3f4f6', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#6b7280' }}>Free</Text>
+                    </View>
+                  </View>
+                  <Text style={{ flex: 1, fontSize: 12, color: C.textSub, textAlign: 'center' }}>{fmtDate(b.createdAt)}</Text>
+                  <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: C.textMuted, textAlign: 'right' }}>$0</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    );
+  }
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: C.bg }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -625,6 +736,7 @@ export default function AdminDashboard() {
               { t: 'businesses', icon: '🏢', label: 'Businesses' },
               { t: 'analytics',  icon: '📊', label: 'Analytics'  },
               { t: 'liveview',   icon: '🔴', label: 'Live View'  },
+              { t: 'billing',    icon: '💳', label: 'Billing'    },
               { t: 'settings',   icon: '⚙️',  label: 'Settings'   },
             ] as { t: Tab; icon: string; label: string }[]).map(({ t, icon, label }) => (
               <TouchableOpacity
@@ -653,7 +765,8 @@ export default function AdminDashboard() {
             <Text style={[styles.topBarTitle, { color: C.text }]}>
               {tab === 'businesses' ? `All Businesses (${totalBusinesses})` :
                tab === 'analytics'  ? 'Analytics' :
-               tab === 'liveview'   ? 'Live View' : 'Settings'}
+               tab === 'liveview'   ? 'Live View' :
+               tab === 'billing'    ? 'Billing' : 'Settings'}
             </Text>
             <TouchableOpacity onPress={toggleTheme} style={{ padding: 6 }}>
               <Text style={{ fontSize: 18 }}>{isDark ? '☀️' : '🌙'}</Text>
@@ -662,6 +775,7 @@ export default function AdminDashboard() {
           {tab === 'businesses' && renderBusinesses()}
           {tab === 'analytics'  && renderAnalytics()}
           {tab === 'liveview'   && renderLiveView()}
+          {tab === 'billing'    && renderAdminBilling()}
           {tab === 'settings'   && renderSettings()}
         </View>
       </View>

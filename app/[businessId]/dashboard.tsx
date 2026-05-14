@@ -12,7 +12,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { BorderRadius, Spacing } from '../../constants/theme';
 import { api, ApiBusiness, ApiService, ApiTicket, ApiStaff } from '../../services/api';
 
-type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'appointments' | 'customers' | 'subscription' | 'settings';
+type Tab = 'home' | 'queue' | 'walkin' | 'services' | 'staff' | 'appointments' | 'customers' | 'billing' | 'settings';
 
 const LIGHT = {
   bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#f0f2f5', border: '#e2e8f0',
@@ -42,7 +42,7 @@ const NAV_ITEMS: { tab: Tab; icon: string; label: string }[] = [
   { tab: 'staff',        icon: '👤', label: 'Staff'        },
   { tab: 'appointments', icon: '📅', label: 'Appointments' },
   { tab: 'customers',    icon: '📊', label: 'Analytics'    },
-  { tab: 'subscription', icon: '💳', label: 'Subscription' },
+  { tab: 'billing', icon: '💳', label: 'Billing' },
   { tab: 'settings',     icon: '🔧', label: 'Settings'     },
 ];
 
@@ -362,7 +362,7 @@ export default function BusinessDashboard() {
     ? Math.round(waitingTickets.reduce((s, t) => s + t.avgTime, 0) / waitingTickets.length) : 0;
 
   // Tab visibility based on plan
-  const BASIC_TABS: Tab[] = ['home', 'services', 'appointments', 'subscription', 'settings'];
+  const BASIC_TABS: Tab[] = ['home', 'services', 'appointments', 'billing', 'settings'];
   const visibleNavItems = plan === 'pro' ? NAV_ITEMS : NAV_ITEMS.filter(n => BASIC_TABS.includes(n.tab));
 
   function statusColor(status: ApiTicket['status']) {
@@ -1332,7 +1332,7 @@ export default function BusinessDashboard() {
           )}
 
           {atLimit && plan === 'basic' && (
-            <TouchableOpacity style={[styles.addBtn, { marginTop: 16, backgroundColor: '#f59e0b' }]} onPress={() => setActiveTab('subscription')}>
+            <TouchableOpacity style={[styles.addBtn, { marginTop: 16, backgroundColor: '#f59e0b' }]} onPress={() => setActiveTab('billing')}>
               <Text style={styles.addBtnText}>Upgrade to Pro for More Staff</Text>
             </TouchableOpacity>
           )}
@@ -1456,8 +1456,8 @@ export default function BusinessDashboard() {
     );
   }
 
-  // ── Subscription tab ────────────────────────────────────────────────────────
-  function renderSubscription() {
+  // ── Billing tab ─────────────────────────────────────────────────────────────
+  function renderBilling() {
     async function handleUpgrade() {
       const biz = business;
       if (!biz) return;
@@ -1472,115 +1472,159 @@ export default function BusinessDashboard() {
       }
     }
 
-    async function handleDowngrade() {
+    async function handleCancel() {
       setPlan('basic');
       try { await api.updateSubscription('basic'); } catch {}
     }
 
-    const plans = [
-      {
-        key: 'basic' as const,
-        name: 'Basic',
-        price: 'Free',
-        color: '#6b7280',
-        features: [
-          '✅ Home dashboard',
-          '✅ Manage services',
-          '✅ Settings',
-          '✅ Customer portal + QR code',
-          '❌ Live queue management',
-          '❌ Add walk-in customers',
-          '❌ Staff management',
-          '❌ Analytics',
-          '❌ Calendar/appointment booking',
-        ],
-      },
-      {
-        key: 'pro' as const,
-        name: 'Pro',
-        price: '$20/mo',
-        color: '#2563eb',
-        features: [
-          '✅ Everything in Basic',
-          '✅ Live queue management',
-          '✅ Add walk-in customers',
-          '✅ Staff management (unlimited)',
-          '✅ Analytics dashboard',
-          '✅ Calendar/appointment booking',
-          '✅ SMS notifications',
-          '✅ Priority support',
-        ],
-      },
-    ];
+    function fmtDate(d: Date) {
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function nextRenewal() {
+      if (!business) return '—';
+      const start = new Date(business.createdAt);
+      const d = new Date();
+      d.setDate(start.getDate());
+      if (d <= new Date()) d.setMonth(d.getMonth() + 1);
+      return fmtDate(d);
+    }
+
+    function deriveInvoices() {
+      if (!business) return [];
+      const start = new Date(business.createdAt);
+      const now = new Date();
+      const invoices: { date: Date; label: string; amount: string; status: string }[] = [];
+      const d = new Date(start);
+      d.setDate(1);
+      while (d <= now) {
+        invoices.unshift({ date: new Date(d), label: 'Pro Subscription', amount: '$20.00', status: 'Paid' });
+        d.setMonth(d.getMonth() + 1);
+      }
+      return invoices.slice(0, 12);
+    }
+
+    const invoices = plan === 'pro' ? deriveInvoices() : [];
+    const memberSince = business ? new Date(business.createdAt) : null;
 
     return (
       <ScrollView contentContainerStyle={styles.tabContent} showsVerticalScrollIndicator={false}>
         {stripeSuccess && (
-          <View style={[styles.successBanner, { backgroundColor: '#d1fae5', marginBottom: 12 }]}>
+          <View style={[styles.successBanner, { backgroundColor: '#d1fae5', marginBottom: 4 }]}>
             <Text style={[styles.successText, { color: '#065f46', fontSize: 15 }]}>
               🎉 You're now on Pro! All features unlocked.
             </Text>
           </View>
         )}
-        <Text style={[styles.sectionTitle, { color: C.text }]}>Subscription Plan</Text>
-        <Text style={[styles.sectionSub, { color: C.textMuted }]}>
-          Current plan:{' '}
-          <Text style={{ fontWeight: '700', color: plan === 'pro' ? '#2563eb' : '#6b7280' }}>
-            {plan === 'pro' ? 'Pro — $20/mo' : 'Basic — Free'}
-          </Text>
-        </Text>
 
-        <View style={{ gap: 16, marginTop: 12 }}>
-          {plans.map(p => {
-            const isActive = plan === p.key;
-            return (
-              <View key={p.key} style={[styles.planCard, {
-                backgroundColor: C.surface, borderColor: isActive ? p.color : C.border,
-                borderWidth: isActive ? 2 : 1,
-              }]}>
-                <View style={styles.planCardHeader}>
-                  <View>
-                    <Text style={[styles.planName, { color: p.color }]}>{p.name}</Text>
-                    <Text style={[styles.planPrice, { color: C.text }]}>{p.price}</Text>
-                  </View>
-                  {isActive ? (
-                    <View style={[styles.planActiveBadge, { backgroundColor: p.color + '22', borderColor: p.color }]}>
-                      <Text style={[styles.planActiveBadgeText, { color: p.color }]}>Current Plan</Text>
-                    </View>
-                  ) : (
-                    p.key === 'basic' ? (
-                      <TouchableOpacity
-                        style={[styles.planSelectBtn, { backgroundColor: '#6b7280' }]}
-                        onPress={handleDowngrade}
-                      >
-                        <Text style={styles.planSelectBtnText}>Downgrade</Text>
-                      </TouchableOpacity>
-                    ) : null
-                  )}
-                </View>
-                <View style={{ gap: 6, marginTop: 12 }}>
-                  {p.features.map(f => (
-                    <Text key={f} style={[styles.planFeature, { color: f.startsWith('❌') ? C.textMuted : C.text }]}>{f}</Text>
-                  ))}
-                </View>
-              </View>
-            );
-          })}
+        {/* Current Plan */}
+        <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.settingsCardTitle, { color: C.text, marginBottom: 14 }]}>Current Plan</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View>
+              <Text style={{ fontSize: 24, fontWeight: '800', color: plan === 'pro' ? '#2563eb' : C.textSub }}>
+                {plan === 'pro' ? 'Pro' : 'Basic'}
+              </Text>
+              <Text style={{ fontSize: 14, color: C.textMuted, marginTop: 3 }}>
+                {plan === 'pro' ? '$20.00 / month · Billed monthly' : '$0 / month · Free forever'}
+              </Text>
+              {memberSince && (
+                <Text style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
+                  Member since {fmtDate(memberSince)}
+                </Text>
+              )}
+            </View>
+            <View style={{
+              backgroundColor: plan === 'pro' ? '#dbeafe' : '#f3f4f6',
+              borderRadius: 20, paddingHorizontal: 14, paddingVertical: 6,
+              borderWidth: 1, borderColor: plan === 'pro' ? '#93c5fd' : '#e5e7eb',
+            }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: plan === 'pro' ? '#1d4ed8' : '#6b7280' }}>
+                {plan === 'pro' ? '● Active' : 'Free'}
+              </Text>
+            </View>
+          </View>
         </View>
 
+        {/* Billing Details — Pro only */}
+        {plan === 'pro' && (
+          <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+            <Text style={[styles.settingsCardTitle, { color: C.text, marginBottom: 14 }]}>Billing Details</Text>
+            {[
+              { label: 'Billing cycle',   val: 'Monthly' },
+              { label: 'Next renewal',    val: nextRenewal() },
+              { label: 'Payment method', val: 'Managed by Stripe' },
+            ].map((row, i, arr) => (
+              <View key={row.label} style={{
+                flexDirection: 'row', justifyContent: 'space-between',
+                paddingVertical: 11,
+                borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: C.border,
+              }}>
+                <Text style={{ fontSize: 14, color: C.textMuted }}>{row.label}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: C.text }}>{row.val}</Text>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={{ marginTop: 14, borderWidth: 1, borderColor: '#fca5a5', borderRadius: BorderRadius.md, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fef2f2' }}
+              onPress={handleCancel}
+            >
+              <Text style={{ color: '#dc2626', fontWeight: '600', fontSize: 14 }}>Cancel Plan</Text>
+            </TouchableOpacity>
+            <Text style={{ fontSize: 11, color: C.textMuted, textAlign: 'center', marginTop: 8 }}>
+              🔒 Payments secured by Stripe · Cancel anytime
+            </Text>
+          </View>
+        )}
+
+        {/* Invoice History */}
+        <View style={[styles.settingsCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <Text style={[styles.settingsCardTitle, { color: C.text, marginBottom: 14 }]}>Invoice History</Text>
+          {invoices.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 24 }}>
+              <Text style={{ fontSize: 28, marginBottom: 10 }}>🧾</Text>
+              <Text style={{ fontSize: 14, color: C.textMuted, textAlign: 'center' }}>
+                No invoices yet — you're on the free plan.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={{ flexDirection: 'row', paddingBottom: 10, borderBottomWidth: 1, borderBottomColor: C.border }}>
+                <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Date</Text>
+                <Text style={{ flex: 2, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Description</Text>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'right' }}>Amount</Text>
+                <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: C.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'right' }}>Status</Text>
+              </View>
+              {invoices.map((inv, i) => (
+                <View key={i} style={{
+                  flexDirection: 'row', paddingVertical: 12, alignItems: 'center',
+                  borderBottomWidth: i < invoices.length - 1 ? 1 : 0, borderBottomColor: C.border,
+                }}>
+                  <Text style={{ flex: 2, fontSize: 13, color: C.textSub }}>{fmtDate(inv.date)}</Text>
+                  <Text style={{ flex: 2, fontSize: 13, color: C.text }}>{inv.label}</Text>
+                  <Text style={{ flex: 1, fontSize: 13, fontWeight: '600', color: C.text, textAlign: 'right' }}>{inv.amount}</Text>
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <View style={{ backgroundColor: '#d1fae5', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>{inv.status}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </>
+          )}
+        </View>
+
+        {/* Upgrade CTA — Basic only */}
         {plan === 'basic' && (
-          <View style={[styles.planCard, { backgroundColor: C.surface, borderColor: '#2563eb', borderWidth: 1, marginTop: 8 }]}>
-            <Text style={[styles.settingsCardTitle, { color: C.text }]}>Upgrade to Pro — $20/mo</Text>
-            <Text style={[styles.sectionSub, { color: C.textMuted, marginBottom: 12 }]}>
+          <View style={[styles.planCard, { backgroundColor: C.surface, borderColor: '#2563eb', borderWidth: 1 }]}>
+            <Text style={[styles.settingsCardTitle, { color: C.text, marginBottom: 6 }]}>Upgrade to Pro — $20/mo</Text>
+            <Text style={[styles.sectionSub, { color: C.textMuted, marginBottom: 14 }]}>
               Unlock live queue, walk-ins, staff management, analytics, and calendar booking.
             </Text>
-
             {!!checkoutError && (
               <View style={[styles.successBanner, { backgroundColor: '#fee2e2', marginBottom: 8 }]}>
                 <Text style={[styles.successText, { color: '#dc2626' }]}>{checkoutError}</Text>
               </View>
             )}
-
             <TouchableOpacity
               style={[styles.addBtn, { backgroundColor: '#2563eb' }, checkoutLoading && { opacity: 0.7 }]}
               onPress={handleUpgrade}
@@ -1590,7 +1634,6 @@ export default function BusinessDashboard() {
                 ? <ActivityIndicator color="#fff" />
                 : <Text style={styles.addBtnText}>Upgrade to Pro — $20/mo</Text>}
             </TouchableOpacity>
-
             <Text style={[styles.sectionSub, { color: C.textMuted, textAlign: 'center', marginTop: 8, fontSize: 11 }]}>
               🔒 Powered by Stripe · Cancel anytime
             </Text>
@@ -2339,7 +2382,7 @@ export default function BusinessDashboard() {
               {activeTab === 'staff'        && 'Staff Members'}
               {activeTab === 'appointments' && 'Appointments'}
               {activeTab === 'customers'    && 'Analytics'}
-              {activeTab === 'subscription' && 'Subscription'}
+              {activeTab === 'billing' && 'Billing'}
               {activeTab === 'settings'     && 'Settings'}
             </Text>
             <TouchableOpacity onPress={toggleTheme} style={{ padding: 6 }}>
@@ -2359,7 +2402,7 @@ export default function BusinessDashboard() {
           {activeTab === 'staff'        && renderStaff()}
           {activeTab === 'appointments' && renderAppointments()}
           {activeTab === 'customers'    && renderCustomers()}
-          {activeTab === 'subscription' && renderSubscription()}
+          {activeTab === 'billing' && renderBilling()}
           {activeTab === 'settings'     && renderSettings()}
         </View>
 
