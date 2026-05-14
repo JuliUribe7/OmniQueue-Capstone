@@ -1692,22 +1692,7 @@ export default function BusinessDashboard() {
       return Math.max(((svc?.avgTime ?? 30) / 60) * HOUR_H, 28);
     }
 
-    // ── Today — grouped by staff with filter ──
-    function TodayView() {
-      const allDayAppts = (byDate[todayKey] ?? []).sort((a, b) => a.time.localeCompare(b.time));
-
-      // Build filter options: All + each staff with appts + Any if applicable
-      const staffWithAppts = staff.filter(s => allDayAppts.some(a => a.staffId === s.id));
-      const hasAny = allDayAppts.some(a => !staff.find(s => s.id === a.staffId));
-
-      // Apply filter
-      const filteredAppts = apptStaffFilter === 'all'
-        ? allDayAppts
-        : apptStaffFilter === 'any'
-          ? allDayAppts.filter(a => !staff.find(s => s.id === a.staffId))
-          : allDayAppts.filter(a => a.staffId === apptStaffFilter);
-
-      function renderApptCard(appt: typeof appointments[0], i: number) {
+    function renderApptCard(appt: typeof appointments[0], i: number) {
         const svc    = services.find(s => s.id === appt.serviceId);
         const member = staff.find(s => s.id === appt.staffId);
         const color  = staffColor(appt.staffId) ?? COLORS[i % COLORS.length];
@@ -1759,7 +1744,22 @@ export default function BusinessDashboard() {
             </View>
           </View>
         );
-      }
+    }
+
+    // ── Today — grouped by staff with filter ──
+    function TodayView() {
+      const allDayAppts = (byDate[todayKey] ?? []).sort((a, b) => a.time.localeCompare(b.time));
+
+      // Build filter options: All + each staff with appts + Any if applicable
+      const staffWithAppts = staff.filter(s => allDayAppts.some(a => a.staffId === s.id));
+      const hasAny = allDayAppts.some(a => !staff.find(s => s.id === a.staffId));
+
+      // Apply filter
+      const filteredAppts = apptStaffFilter === 'all'
+        ? allDayAppts
+        : apptStaffFilter === 'any'
+          ? allDayAppts.filter(a => !staff.find(s => s.id === a.staffId))
+          : allDayAppts.filter(a => a.staffId === apptStaffFilter);
 
       return (
         <ScrollView contentContainerStyle={{ gap: 10 }} showsVerticalScrollIndicator={false}>
